@@ -45,8 +45,6 @@ tailwind.config = {
   @keyframes spin{ to{ transform: rotate(360deg); } }
   .stat-card{ transition: all .15s ease; }
   .stat-card:hover{ transform: translateY(-2px); }
-
-  /* Entrega compacta */
   .entrega-grupo summary{ list-style:none; cursor:pointer; }
   .entrega-grupo summary::-webkit-details-marker{ display:none; }
   .entrega-grupo summary::marker{ display:none; }
@@ -72,7 +70,6 @@ tailwind.config = {
   </div>
 </div>
 
-<!-- SELECCIÓN -->
 <div id="screen-select" class="hidden min-h-screen items-center justify-center p-5" style="display:none">
   <div class="w-full max-w-3xl">
     <div class="text-center mb-8">
@@ -100,7 +97,6 @@ tailwind.config = {
   </div>
 </div>
 
-<!-- APP -->
 <div id="screen-app" class="hidden">
   <header class="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
@@ -142,14 +138,16 @@ tailwind.config = {
 <div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-[60]"></div>
 
 <script>
-const API = '/api/ventas';
-const CONFIG_KEY = 'sopa_config_v7';
+const API_VENTAS = '/api/ventas';
+const API_EQUIPO = '/api/equipo';
+const CONFIG_KEY = 'sopa_config_v8';
 const BASE_UBICACIONES = ['EDIF. CORPORATIVO', 'PIM', 'PROYECTOS', 'CAU'];
 
 const $  = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => 'v_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const uidEq = () => 'eq_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const icons = () => { if (window.lucide) window.lucide.createIcons(); };
 const IN = 'w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none bg-white';
 const LBL = 'block text-xs font-bold text-slate-500 mb-1.5';
@@ -175,14 +173,11 @@ function toast(msg, type='ok') {
   clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.add('hidden'), 2800);
 }
 
-/* Normaliza teléfono para WhatsApp */
 function telWhatsApp(tel) {
   if (!tel) return '';
   const digits = String(tel).replace(/[^\d]/g, '');
   if (!digits) return '';
-  // Si empieza con 0 y tiene 10 dígitos → Colombia (agregar 57)
   if (digits.length === 10 && digits.startsWith('3')) return '57' + digits;
-  // Si tiene 12 dígitos y empieza con 57 → ya tiene el código
   if (digits.length === 12 && digits.startsWith('57')) return digits;
   return digits;
 }
@@ -193,14 +188,14 @@ function waLink(v) {
   return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 }
 
-/* CONFIG */
+/* Config solo local (campaña: título, meta, precio) */
 const defaultConfig = { titulo:'Sopas Solidarias', beneficiario:'Ayuda para un enfermo', meta:120, precio:5, moneda:'$' };
 
 let data = {
   config: { ...defaultConfig },
-  colaboradores: [],
-  tesoreroEmail: '',
-  despachadores: [],
+  colaboradores: [],   // [{id, nombre, email}]
+  tesorero: null,      // {id, nombre, email}
+  despachadores: [],   // [{id, nombre, email}]
   ventas: []
 };
 
@@ -210,25 +205,53 @@ function cargarConfigLocal() {
     if (!raw) return;
     const p = JSON.parse(raw);
     data.config = { ...defaultConfig, ...(p.config || {}) };
-    data.colaboradores = Array.isArray(p.colaboradores) ? p.colaboradores : [];
-    data.tesoreroEmail = typeof p.tesoreroEmail === 'string' ? p.tesoreroEmail : '';
-    data.despachadores = Array.isArray(p.despachadores) ? p.despachadores : [];
   } catch {}
 }
 function guardarConfigLocal() {
   try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify({
-      config: data.config,
-      colaboradores: data.colaboradores,
-      tesoreroEmail: data.tesoreroEmail,
-      despachadores: data.despachadores
-    }));
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({ config: data.config }));
   } catch {}
+}
+
+/* Equipo desde D1 */
+async function cargarEquipoDesdeAPI() {
+  try {
+    const res = await fetch(API_EQUIPO, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Error ' + res.status);
+    const lista = await res.json();
+    data.colaboradores = lista.filter(x => x.tipo === 'colaborador').map(x => ({ id:x.id, nombre:x.nombre, email:x.email }));
+    data.despachadores = lista.filter(x => x.tipo === 'despachador').map(x => ({ id:x.id, nombre:x.nombre, email:x.email }));
+    const t = lista.find(x => x.tipo === 'tesorero');
+    data.tesorero = t ? { id:t.id, nombre:t.nombre || 'Tesorería', email:t.email } : null;
+  } catch (e) {
+    console.error('No se pudo cargar equipo:', e);
+    toast('No se pudo cargar el equipo', 'error');
+  }
+}
+
+async function guardarMiembroEquipo(miembro) {
+  try {
+    const res = await fetch(API_EQUIPO, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(miembro)
+    });
+    if (!res.ok) throw new Error('Error ' + res.status);
+    return true;
+  } catch (e) {
+    toast('Error al guardar en servidor', 'error');
+    return false;
+  }
+}
+async function borrarMiembroEquipo(id) {
+  try {
+    await fetch(API_EQUIPO + '/' + id, { method: 'DELETE' });
+  } catch { toast('Error al eliminar', 'error'); }
 }
 
 async function cargarVentasDesdeAPI() {
   try {
-    const res = await fetch(API, { cache: 'no-store' });
+    const res = await fetch(API_VENTAS, { cache: 'no-store' });
     if (!res.ok) throw new Error('Error ' + res.status);
     const ventas = await res.json();
     data.ventas = ventas.map(v => ({
@@ -247,19 +270,19 @@ async function cargarVentasDesdeAPI() {
 async function guardarVenta(venta) {
   if (!venta) return;
   try {
-    const res = await fetch(API, {
+    const res = await fetch(API_VENTAS, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(venta)
     });
     if (!res.ok) throw new Error('Error ' + res.status);
   } catch (e) {
-    toast('Error al guardar en servidor: ' + e.message, 'error');
+    toast('Error al guardar: ' + e.message, 'error');
     console.error(e);
   }
 }
 async function borrarVentaAPI(id) {
-  try { await fetch(API + '/' + id, { method: 'DELETE' }); }
+  try { await fetch(API_VENTAS + '/' + id, { method: 'DELETE' }); }
   catch { toast('Error al eliminar en servidor', 'error'); }
 }
 
@@ -305,8 +328,8 @@ function determinarUsuario() {
     const c = data.colaboradores.find(x => x.email.toLowerCase() === emailParam);
     if (c) user = { rol:'colaborador', nombre:c.nombre, email:c.email };
   } else if (rolParam === 'tesorero' && emailParam) {
-    if (data.tesoreroEmail && data.tesoreroEmail.toLowerCase() === emailParam)
-      user = { rol:'tesorero', nombre:'Tesorero', email:data.tesoreroEmail };
+    if (data.tesorero && data.tesorero.email.toLowerCase() === emailParam)
+      user = { rol:'tesorero', nombre:'Tesorero', email:data.tesorero.email };
   } else if (rolParam === 'despachador' && emailParam) {
     const d = data.despachadores.find(x => x.email.toLowerCase() === emailParam);
     if (d) user = { rol:'despachador', nombre:d.nombre, email:d.email };
@@ -314,9 +337,9 @@ function determinarUsuario() {
 }
 
 let activeTab = null;
-let despachoFiltroPago = 'todos';         // 'todos' | 'pagados' | 'pendientes'
-let despachoGruposColapsados = {};        // { 'PIM': true } = colapsado
-let despachoMostrarEntregados = false;    // toggle histórico
+let despachoFiltroPago = 'todos';
+let despachoGruposColapsados = {};
+let despachoMostrarEntregados = false;
 const filtros = { search:'', conciliado:'', entregado:'', colaborador:'', incompletos:false };
 
 /* SELECCIÓN */
@@ -332,10 +355,10 @@ function renderSelect() {
     icon:'user-pen', color:'bg-brand-50 text-brand-600',
     title: c.nombre, sub:'Colaborador · ' + c.email
   }));
-  if (data.tesoreroEmail) rows.push({
-    href: `${base}?rol=tesorero&email=${encodeURIComponent(data.tesoreroEmail)}`,
+  if (data.tesorero) rows.push({
+    href: `${base}?rol=tesorero&email=${encodeURIComponent(data.tesorero.email)}`,
     icon:'banknote', color:'bg-emerald-50 text-emerald-600',
-    title:'Tesorería', sub:'Conciliación · ' + data.tesoreroEmail
+    title:'Tesorería', sub:'Conciliación · ' + data.tesorero.email
   });
   data.despachadores.forEach(d => rows.push({
     href: `${base}?rol=despachador&email=${encodeURIComponent(d.email)}`,
@@ -361,7 +384,7 @@ function renderSelect() {
   icons();
 }
 
-/* RENDER PRINCIPAL */
+/* RENDER */
 const TABS = {
   admin: [
     {id:'dashboard', label:'Dashboard', icon:'pie-chart'},
@@ -753,7 +776,7 @@ function filaAdmin(v) {
     </tr>`;
 }
 
-/* ADMIN EQUIPO */
+/* ADMIN EQUIPO (ahora con D1) */
 function panelEquipo() {
   const base = location.origin === 'null' ? location.href.split('?')[0] : location.origin + location.pathname;
   const linkCol = c => `${base}?rol=colaborador&email=${encodeURIComponent(c.email)}`;
@@ -762,14 +785,14 @@ function panelEquipo() {
 
   const colRows = data.colaboradores.map(c => personaRow('colaborador', c, linkCol(c), 'user-pen')).join('');
   const desRows = data.despachadores.map(d => personaRow('despachador', d, linkDes(d), 'truck')).join('');
-  const tesBlock = data.tesoreroEmail
-    ? personaRow('tesorero', {nombre:'Tesorería', email:data.tesoreroEmail}, linkTes(data.tesoreroEmail), 'banknote')
+  const tesBlock = data.tesorero
+    ? personaRow('tesorero', data.tesorero, linkTes(data.tesorero.email), 'banknote')
     : `<div class="p-4 text-sm text-slate-500 italic">Sin tesorero asignado.</div>`;
 
   return `
-    <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 mb-4 flex items-start gap-2">
-      <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
-      <span>La configuración de correos se guarda en <b>este navegador</b>. Se recomienda hacerlo siempre desde el mismo equipo.</span>
+    <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl p-3 mb-4 flex items-start gap-2">
+      <i data-lucide="cloud" class="w-4 h-4 shrink-0 mt-0.5"></i>
+      <span>El equipo ahora se guarda en la nube. <b>Se sincroniza entre tu móvil y tu PC</b> automáticamente.</span>
     </div>
     <div class="grid lg:grid-cols-3 gap-5">
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -806,7 +829,7 @@ function panelEquipo() {
           </div>
         </div>
         <form data-add="tesorero" class="p-4 border-b border-slate-100 space-y-2">
-          <input name="email" type="email" value="${esc(data.tesoreroEmail)}" placeholder="tesorero@ejemplo.com" required class="${IN}">
+          <input name="email" type="email" value="${esc(data.tesorero ? data.tesorero.email : '')}" placeholder="tesorero@ejemplo.com" required class="${IN}">
           <button class="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
             <i data-lucide="save" class="w-4 h-4"></i> Guardar tesorero
           </button>
@@ -852,7 +875,7 @@ function personaRow(tipo, persona, link, icon) {
         <i data-lucide="link" class="w-4 h-4"></i>
       </button>
       ${tipo !== 'tesorero' ? `
-      <button data-remove="${tipo}" data-email="${esc(persona.email)}" title="Eliminar"
+      <button data-remove="${tipo}" data-id="${esc(persona.id)}" title="Eliminar"
         class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
         <i data-lucide="trash-2" class="w-4 h-4"></i>
       </button>` : ''}
@@ -865,7 +888,7 @@ function panelCampaña() {
   return `
     <div class="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
       <h3 class="font-bold text-slate-900">Configuración de la campaña</h3>
-      <p class="text-xs text-slate-500 mt-0.5 mb-4">Estos valores alimentan todos los cálculos.</p>
+      <p class="text-xs text-slate-500 mt-0.5 mb-4">Estos valores se guardan localmente en este navegador.</p>
       <form id="form-config" class="space-y-3">
         <div><label class="${LBL}">Título</label><input name="titulo" value="${esc(c.titulo)}" class="${IN}"></div>
         <div><label class="${LBL}">Beneficiario / causa</label><input name="beneficiario" value="${esc(c.beneficiario)}" class="${IN}"></div>
@@ -1071,9 +1094,7 @@ function panelTesorero() {
     </div>`;
 }
 
-/* ═══════════════════════════════════════════════════════
-   DESPACHADOR · Tabla compacta tipo listado de ruta
-   ═══════════════════════════════════════════════════════ */
+/* DESPACHADOR */
 function panelDespachador() {
   const todas = ventasOrd();
   let pendientes = todas.filter(v => !v.entregado);
@@ -1091,7 +1112,6 @@ function panelDespachador() {
   const pendSinPago = todas.filter(v => !v.entregado && !v.conciliado).length;
   const pendTodos   = todas.filter(v => !v.entregado).length;
 
-  // Agrupar por ubicación
   const grupos = {};
   pendientes.forEach(v => {
     const key = (v.ubicacion || 'SIN UBICACIÓN').trim().toUpperCase() || 'SIN UBICACIÓN';
@@ -1102,8 +1122,6 @@ function panelDespachador() {
 
   return `
     <div class="space-y-3">
-
-      <!-- Barra de progreso y stats compacta -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div class="flex items-center gap-3">
@@ -1113,11 +1131,9 @@ function panelDespachador() {
               <p class="text-[11px] text-slate-400 mt-0.5">${todas.length} pedidos vendidos en total</p>
             </div>
           </div>
-          <div class="flex items-center gap-1.5">
-            <button id="btn-despacho-xls" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
-              <i data-lucide="sheet" class="w-3.5 h-3.5"></i> Excel
-            </button>
-          </div>
+          <button id="btn-despacho-xls" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+            <i data-lucide="sheet" class="w-3.5 h-3.5"></i> Excel
+          </button>
         </div>
         <div class="h-2 w-full bg-brand-100 rounded-full overflow-hidden">
           <div class="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500" style="width:${pctEnt}%"></div>
@@ -1128,7 +1144,6 @@ function panelDespachador() {
         </div>
       </div>
 
-      <!-- Filtros compactos -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-wrap items-center gap-1.5">
         <button data-filtro-pago="todos" class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition
           ${despachoFiltroPago === 'todos' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
@@ -1148,7 +1163,6 @@ function panelDespachador() {
         </button>
       </div>
 
-      <!-- Lista compacta de pendientes agrupada por ubicación -->
       ${pendientes.length === 0
         ? `<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center">
              <div class="w-12 h-12 mx-auto rounded-2xl bg-brand-50 text-brand-400 grid place-items-center mb-2">
@@ -1160,7 +1174,6 @@ function panelDespachador() {
         : ubicaciones.map(ubi => grupoEntregaCompacto(ubi, grupos[ubi])).join('')
       }
 
-      <!-- Histórico de entregados (toggle) -->
       ${despachoMostrarEntregados && entregadas.length > 0 ? `
         <div class="mt-4">
           <div class="flex items-center gap-2 mb-2">
@@ -1174,7 +1187,6 @@ function panelDespachador() {
     </div>`;
 }
 
-/* Grupo de una ubicación · tabla compacta */
 function grupoEntregaCompacto(ubi, items) {
   const colapsado = despachoGruposColapsados[ubi] === true;
   const sopas = items.reduce((s,v) => s + Number(v.cantidad||0), 0);
@@ -1197,7 +1209,6 @@ function grupoEntregaCompacto(ubi, items) {
           <i data-lucide="package" class="w-3 h-3"></i> ${sopas}
         </span>
       </summary>
-
       <div class="overflow-x-auto">
         <table class="compacta w-full text-xs">
           <thead class="bg-slate-50/70 text-[10px] uppercase tracking-wider text-slate-400 border-b border-slate-100">
@@ -1265,9 +1276,7 @@ function filaEntregaCompacta(v) {
     </tr>`;
 }
 
-/* Historial de entregados compacto */
 function grupoEntregados(items) {
-  // Agrupar por ubicación también
   const grupos = {};
   items.forEach(v => {
     const key = (v.ubicacion || 'SIN UBICACIÓN').trim().toUpperCase() || 'SIN UBICACIÓN';
@@ -1503,8 +1512,6 @@ function exportarCSV() {
   descargar(`sopas_ventas_${fechaArchivo()}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8');
   toast('Excel (CSV) descargado');
 }
-
-/* Exportación específica de ruta para el despachador */
 function exportarRutaDespacho() {
   const todas = ventasOrd().filter(v => !v.entregado);
   const head = ['Ubicacion','Cliente','Telefono','Piso','Departamento','Cantidad','Referencia','PagoConfirmado','Vendedor'];
@@ -1580,7 +1587,7 @@ $('#panel').addEventListener('keydown', e => {
   }
 });
 
-/* EVENTOS */
+/* CLICKS */
 $('#panel').addEventListener('click', async e => {
   const tb = e.target.closest('[data-tab]');
   if (tb) { activeTab = tb.dataset.tab; render(); return; }
@@ -1608,11 +1615,10 @@ $('#panel').addEventListener('click', async e => {
 
   const rm = e.target.closest('[data-remove]');
   if (rm) {
-    const tipo = rm.dataset.remove, email = rm.dataset.email;
+    const tipo = rm.dataset.remove, id = rm.dataset.id;
     if (!confirm(`¿Eliminar este ${tipo}?`)) return;
-    if (tipo === 'colaborador') data.colaboradores = data.colaboradores.filter(c => c.email !== email);
-    if (tipo === 'despachador') data.despachadores = data.despachadores.filter(d => d.email !== email);
-    guardarConfigLocal();
+    await borrarMiembroEquipo(id);
+    await cargarEquipoDesdeAPI();
     render(); renderSelect();
     toast('Eliminado');
     return;
@@ -1634,7 +1640,6 @@ $('#panel').addEventListener('click', async e => {
     return;
   }
 
-  /* Guardar estado de grupos colapsados antes de acciones */
   document.querySelectorAll('.entrega-grupo').forEach(el => {
     const ubi = el.dataset.grupo;
     if (ubi) despachoGruposColapsados[ubi] = !el.open;
@@ -1644,7 +1649,17 @@ $('#panel').addEventListener('click', async e => {
 
   if (e.target.closest('#btn-xls') || e.target.closest('#btn-xls-tes')) exportarCSV();
   if (e.target.closest('#btn-json')) {
-    descargar(`sopas_respaldo_${fechaArchivo()}.json`, JSON.stringify(data, null, 2), 'application/json');
+    const payload = {
+      exportado: new Date().toISOString(),
+      config: data.config,
+      equipo: {
+        colaboradores: data.colaboradores,
+        tesorero: data.tesorero,
+        despachadores: data.despachadores
+      },
+      ventas: data.ventas
+    };
+    descargar(`sopas_respaldo_${fechaArchivo()}.json`, JSON.stringify(payload, null, 2), 'application/json');
     toast('Respaldo JSON descargado');
   }
   if (e.target.closest('#btn-clear-sales')) {
@@ -1657,9 +1672,8 @@ $('#panel').addEventListener('click', async e => {
   }
 });
 
-/* Checkboxes: marcar entregado / desmarcar */
+/* CHECKS */
 $('#panel').addEventListener('change', async e => {
-  // marcar entregado
   const chkEnt = e.target.closest('[data-ent]');
   if (chkEnt && chkEnt.checked) {
     const v = data.ventas.find(x => x.id === chkEnt.dataset.ent);
@@ -1672,7 +1686,6 @@ $('#panel').addEventListener('change', async e => {
     toast(`✓ ${v.cliente || 'Pedido'} entregado`, 'ok');
     return;
   }
-  // desmarcar entrega
   const chkUn = e.target.closest('[data-unent]');
   if (chkUn && !chkUn.checked) {
     const v = data.ventas.find(x => x.id === chkUn.dataset.unent);
@@ -1685,7 +1698,6 @@ $('#panel').addEventListener('change', async e => {
     toast('Entrega revertida', 'info');
     return;
   }
-  // conciliación
   const chk = e.target.closest('[data-conc]');
   if (chk) {
     const v = data.ventas.find(x => x.id === chk.dataset.conc);
@@ -1699,7 +1711,7 @@ $('#panel').addEventListener('change', async e => {
   }
 });
 
-/* Notas de conciliación y búsqueda */
+/* INPUTS */
 let notaTimer;
 $('#panel').addEventListener('input', e => {
   const n = e.target.closest('[data-nota]');
@@ -1726,7 +1738,6 @@ $('#panel').addEventListener('change', e => {
   if (e.target.id === 'f-col')  { filtros.colaborador = e.target.value; renderPanel(); }
 });
 
-/* Guardar estado de grupos colapsados */
 $('#panel').addEventListener('toggle', e => {
   const det = e.target.closest('.entrega-grupo');
   if (det && det.dataset.grupo) {
@@ -1734,31 +1745,37 @@ $('#panel').addEventListener('toggle', e => {
   }
 }, true);
 
-/* Formularios equipo / config */
-$('#panel').addEventListener('submit', e => {
+/* FORMULARIOS EQUIPO */
+$('#panel').addEventListener('submit', async e => {
   const addForm = e.target.closest('[data-add]');
   if (addForm) {
     e.preventDefault();
     const tipo = addForm.dataset.add;
     const f = new FormData(addForm);
+
     if (tipo === 'colaborador' || tipo === 'despachador') {
       const nombre = String(f.get('nombre')||'').trim();
       const email = String(f.get('email')||'').trim().toLowerCase();
       if (!nombre || !email) return toast('Completa nombre y correo', 'error');
       const lista = tipo === 'colaborador' ? data.colaboradores : data.despachadores;
       if (lista.some(x => x.email.toLowerCase() === email)) return toast('Ese correo ya existe', 'error');
-      lista.push({ nombre, email });
-      guardarConfigLocal();
-      render(); renderSelect();
-      toast('Agregado');
+      const ok = await guardarMiembroEquipo({ id: uidEq(), tipo, nombre, email });
+      if (ok) {
+        await cargarEquipoDesdeAPI();
+        render(); renderSelect();
+        toast('Agregado y sincronizado');
+      }
     }
     if (tipo === 'tesorero') {
       const email = String(f.get('email')||'').trim().toLowerCase();
       if (!email) return toast('Ingresa un correo', 'error');
-      data.tesoreroEmail = email;
-      guardarConfigLocal();
-      render(); renderSelect();
-      toast('Tesorero guardado');
+      const id = data.tesorero ? data.tesorero.id : 'tesorero_fijo';
+      const ok = await guardarMiembroEquipo({ id, tipo:'tesorero', nombre:'Tesorería', email });
+      if (ok) {
+        await cargarEquipoDesdeAPI();
+        render(); renderSelect();
+        toast('Tesorero guardado y sincronizado');
+      }
     }
     return;
   }
@@ -1792,8 +1809,8 @@ $('#btn-new').addEventListener('click', () => openModal());
 $('#btn-refresh').addEventListener('click', async () => {
   const icon = $('#btn-refresh i');
   icon?.classList.add('animate-spin');
-  await cargarVentasDesdeAPI();
-  render();
+  await Promise.all([cargarVentasDesdeAPI(), cargarEquipoDesdeAPI()]);
+  render(); renderSelect();
   icon?.classList.remove('animate-spin');
   toast('Datos actualizados');
 });
@@ -1802,7 +1819,7 @@ $('#btn-refresh').addEventListener('click', async () => {
 (async function init() {
   icons();
   cargarConfigLocal();
-  await cargarVentasDesdeAPI();
+  await Promise.all([cargarVentasDesdeAPI(), cargarEquipoDesdeAPI()]);
   determinarUsuario();
 
   $('#loading-screen').style.display = 'none';
@@ -1820,7 +1837,7 @@ $('#btn-refresh').addEventListener('click', async () => {
   render();
 
   setInterval(async () => {
-    await cargarVentasDesdeAPI();
+    await Promise.all([cargarVentasDesdeAPI(), cargarEquipoDesdeAPI()]);
     render();
   }, 30000);
 })();
