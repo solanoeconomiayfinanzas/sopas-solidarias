@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Campaña de Sopas Solidarias</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: { brand: {
+      50:'#fff7ed',100:'#ffedd5',200:'#fed7aa',300:'#fdba74',400:'#fb923c',
+      500:'#f97316',600:'#ea580c',700:'#c2410c',800:'#9a3412',900:'#7c2d12'
+    }},
+    fontFamily: { sans: ['Inter','system-ui','sans-serif'] }
+  }}
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+  body{ font-family:'Inter',system-ui,sans-serif; }
+  .fade-in{ animation: fadeIn .22s ease both; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:8px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .missing{ color:#94a3b8; font-style:italic; font-size:.75rem; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen">
+
+<!-- ═══════════ SELECCIÓN ═══════════ -->
+<div id="screen-select" class="min-h-screen flex items-center justify-center p-5">
+  <div class="w-full max-w-2xl">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 mx-auto rounded-2xl bg-brand-500 text-white grid place-items-center shadow-lg shadow-brand-500/30">
+        <i data-lucide="soup" class="w-8 h-8"></i>
+      </div>
+      <h1 id="sel-title" class="mt-5 text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Campaña de Sopas Solidarias</h1>
+      <p id="sel-sub" class="text-slate-500 mt-2">Acceso por enlace personal · Sin contraseñas</p>
+    </div>
+
+    <a href="?rol=admin"
+       class="group block bg-slate-900 rounded-2xl shadow-sm hover:shadow-lg p-6 flex items-center gap-4 transition mb-4">
+      <div class="w-12 h-12 rounded-xl bg-white/10 text-white grid place-items-center">
+        <i data-lucide="shield-check" class="w-6 h-6"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="font-bold text-white text-lg leading-tight">Acceso Superadmin</p>
+        <p class="text-xs text-slate-400 mt-0.5">Configura correos, campaña y respaldo</p>
+      </div>
+      <i data-lucide="arrow-right" class="w-5 h-5 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition"></i>
+    </a>
+
+    <div id="sel-links" class="space-y-2"></div>
+
+    <p class="text-center text-xs text-slate-400 mt-8">
+      Los colaboradores, tesorero y despachadores acceden con el enlace único que el superadmin les comparte.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════ APP ═══════════ -->
+<div id="screen-app" class="hidden">
+  <header class="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 shrink-0 rounded-xl bg-brand-500 text-white grid place-items-center shadow-sm shadow-brand-500/40">
+          <i data-lucide="soup" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 id="hdr-title" class="font-bold text-slate-900 leading-tight truncate">Campaña de Sopas</h1>
+          <p id="hdr-sub" class="text-xs text-slate-500 truncate">—</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="role-badge" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"></span>
+        <button id="btn-new" class="hidden inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-sm font-semibold px-3.5 py-2 rounded-xl shadow-sm transition">
+          <i data-lucide="plus" class="w-4 h-4"></i><span class="hidden sm:inline">Nueva venta</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-5">
+    <section id="progress-card" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 fade-in"></section>
+    <section id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"></section>
+    <nav id="tabs" class="flex gap-1 p-1 bg-white rounded-xl border border-slate-200 shadow-sm w-fit max-w-full overflow-x-auto"></nav>
+    <section id="panel" class="fade-in"></section>
+    <footer class="pt-4 pb-8 text-center text-xs text-slate-400">
+      <p id="foot-text">Campaña solidaria</p>
+    </footer>
+  </main>
+</div>
+
+<div id="modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+  <div id="modal-box" class="min-h-full flex items-start sm:items-center justify-center py-6"></div>
+</div>
+<div id="toast" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-[60]"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   UTILIDADES
+   ═══════════════════════════════════════════════════════ */
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => 'v_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const icons = () => { if (window.lucide) window.lucide.createIcons(); };
+const IN = 'w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none bg-white';
+const LBL = 'block text-xs font-bold text-slate-500 mb-1.5';
+
+/* Renderiza un valor o placeholder en gris si está vacío */
+const val = (v, fb = '—') => v && String(v).trim() ? esc(v) : `<span class="missing">${fb}</span>`;
+
+function toast(msg, type='ok') {
+  const cfg = { ok:{bg:'bg-slate-900', i:'check-circle', c:'text-emerald-400'},
+                error:{bg:'bg-rose-600', i:'alert-circle', c:'text-white'},
+                info:{bg:'bg-slate-900', i:'info', c:'text-brand-400'} }[type];
+  const t = $('#toast');
+  t.innerHTML = `<div class="${cfg.bg} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 fade-in">
+    <i data-lucide="${cfg.i}" class="w-4 h-4 ${cfg.c}"></i><span>${esc(msg)}</span></div>`;
+  t.classList.remove('hidden'); icons();
+  clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.add('hidden'), 2800);
+}
+
+/* ═══════════════════════════════════════════════════════
+   DATOS · una sola fuente de verdad
+   ═══════════════════════════════════════════════════════ */
+const KEY = 'sopa_solidaria_v2';
+const seed = () => ({
+  config: { titulo:'Sopas Solidarias', beneficiario:'Ayuda para un enfermo', meta:120, precio:5, moneda:'$' },
+  colaboradores: [], tesoreroEmail: '', despachadores: [], ventas: []
+});
+
+let data = cargar();
+function cargar() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return seed();
+    const p = JSON.parse(raw), base = seed();
+    return {
+      config: { ...base.config, ...(p.config || {}) },
+      colaboradores: Array.isArray(p.colaboradores) ? p.colaboradores : [],
+      tesoreroEmail: typeof p.tesoreroEmail === 'string' ? p.tesoreroEmail : '',
+      despachadores: Array.isArray(p.despachadores) ? p.despachadores : [],
+      ventas: Array.isArray(p.ventas) ? p.ventas : []
+    };
+  } catch { return seed(); }
+}
+function guardar() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch { toast('No se pudo guardar', 'error'); } }
+
+const precio = () => Number(data.config.precio) || 0;
+const money = n => `${data.config.moneda}${Number(n).toLocaleString('es-CO',{minimumFractionDigits:0,maximumFractionDigits:2})}`;
+const fmt = iso => new Date(iso).toLocaleString('es-CO', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+const ventasOrd = () => [...data.ventas].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+const totalSopas = () => data.ventas.reduce((s,v) => s + Number(v.cantidad||0), 0);
+const totalRecaudado = () => data.ventas.reduce((s,v) => s + Number(v.montoPagado||0), 0);
+const totalConciliado = () => data.ventas.filter(v => v.conciliado).reduce((s,v) => s + Number(v.montoPagado||0), 0);
+const totalEntregado = () => data.ventas.filter(v => v.entregado).reduce((s,v) => s + Number(v.cantidad||0), 0);
+
+/* ═══════════════════════════════════════════════════════
+   ACCESO POR URL
+   ═══════════════════════════════════════════════════════ */
+const qs = new URLSearchParams(location.search);
+const rolParam = (qs.get('rol') || '').toLowerCase();
+const emailParam = (qs.get('email') || '').trim().toLowerCase();
+
+let user = null;
+if (rolParam === 'admin') {
+  user = { rol:'admin', nombre:'Superadmin', email:'' };
+} else if (rolParam === 'colaborador' && emailParam) {
+  const c = data.colaboradores.find(x => x.email.toLowerCase() === emailParam);
+  if (c) user = { rol:'colaborador', nombre:c.nombre, email:c.email };
+} else if (rolParam === 'tesorero' && emailParam) {
+  if (data.tesoreroEmail && data.tesoreroEmail.toLowerCase() === emailParam)
+    user = { rol:'tesorero', nombre:'Tesorero', email:data.tesoreroEmail };
+} else if (rolParam === 'despachador' && emailParam) {
+  const d = data.despachadores.find(x => x.email.toLowerCase() === emailParam);
+  if (d) user = { rol:'despachador', nombre:d.nombre, email:d.email };
+}
+
+let activeTab = null;
+const filtros = { search:'', conciliado:'', entregado:'', colaborador:'', incompletos:false };
+
+/* ═══════════════════════════════════════════════════════
+   PANTALLA DE SELECCIÓN
+   ═══════════════════════════════════════════════════════ */
+function renderSelect() {
+  $('#sel-title').textContent = data.config.titulo;
+  $('#sel-sub').textContent = `${data.config.meta} sopas · ${money(precio())} c/u · ${data.config.beneficiario}`;
+
+  const base = location.origin === 'null' ? location.href.split('?')[0] : location.origin + location.pathname;
+  const rows = [];
+
+  data.colaboradores.forEach(c => rows.push({
+    href: `${base}?rol=colaborador&email=${encodeURIComponent(c.email)}`,
+    icon:'user-pen', color:'bg-brand-50 text-brand-600',
+    title: c.nombre, sub:'Colaborador · ' + c.email
+  }));
+  if (data.tesoreroEmail) rows.push({
+    href: `${base}?rol=tesorero&email=${encodeURIComponent(data.tesoreroEmail)}`,
+    icon:'banknote', color:'bg-emerald-50 text-emerald-600',
+    title:'Tesorería', sub:'Conciliación · ' + data.tesoreroEmail
+  });
+  data.despachadores.forEach(d => rows.push({
+    href: `${base}?rol=despachador&email=${encodeURIComponent(d.email)}`,
+    icon:'truck', color:'bg-sky-50 text-sky-600',
+    title: d.nombre, sub:'Despachador · ' + d.email
+  }));
+
+  $('#sel-links').innerHTML = rows.length
+    ? `<p class="text-xs font-bold uppercase tracking-wider text-slate-400 mt-6 mb-2 px-1">Accesos configurados</p>` +
+      rows.map(r => `
+      <a href="${r.href}" class="group flex items-center gap-3 bg-white rounded-xl border border-slate-200 hover:border-brand-300 hover:shadow-sm p-3 transition">
+        <div class="w-9 h-9 rounded-lg ${r.color} grid place-items-center shrink-0">
+          <i data-lucide="${r.icon}" class="w-4 h-4"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="font-semibold text-sm text-slate-800 truncate">${esc(r.title)}</p>
+          <p class="text-xs text-slate-500 truncate">${esc(r.sub)}</p>
+        </div>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 group-hover:text-brand-500"></i>
+      </a>`).join('')
+    : `<div class="mt-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl p-4 text-center">
+        Aún no hay accesos configurados. Entra como Superadmin para agregar correos.
+      </div>`;
+  icons();
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER PRINCIPAL
+   ═══════════════════════════════════════════════════════ */
+const TABS = {
+  admin: [
+    {id:'ventas', label:'Ventas', icon:'receipt'},
+    {id:'equipo', label:'Equipo', icon:'users'},
+    {id:'campaña', label:'Campaña', icon:'settings'},
+    {id:'respaldo', label:'Respaldo', icon:'database'}
+  ],
+  colaborador: [{id:'mis-ventas', label:'Mis ventas', icon:'receipt'}],
+  tesorero:    [{id:'conciliacion', label:'Conciliación', icon:'banknote'}],
+  despachador: [{id:'entregas', label:'Entregas', icon:'truck'}]
+};
+
+function render() {
+  if (!activeTab) activeTab = TABS[user.rol][0].id;
+  renderHeader();
+  renderProgress();
+  renderStats();
+  renderTabs();
+  renderPanel();
+  icons();
+}
+
+function renderHeader() {
+  $('#hdr-title').textContent = data.config.titulo;
+  $('#hdr-sub').textContent = `${data.config.beneficiario} · ${money(precio())} por sopa`;
+  $('#foot-text').textContent = `${data.config.titulo} · ${data.config.beneficiario}`;
+
+  const b = $('#role-badge');
+  const map = {
+    admin:       { txt:'Superadmin', cls:'bg-slate-900 text-white', i:'shield-check' },
+    colaborador: { txt:user.nombre,  cls:'bg-brand-50 text-brand-700 border border-brand-200', i:'user-pen' },
+    tesorero:    { txt:'Tesorería',  cls:'bg-emerald-50 text-emerald-700 border border-emerald-200', i:'banknote' },
+    despachador: { txt:user.nombre,  cls:'bg-sky-50 text-sky-700 border border-sky-200', i:'truck' }
+  }[user.rol];
+  b.className = `hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${map.cls}`;
+  b.innerHTML = `<i data-lucide="${map.i}" class="w-3.5 h-3.5"></i> ${esc(map.txt)}`;
+
+  $('#btn-new').classList.toggle('hidden', user.rol !== 'colaborador');
+}
+
+function renderProgress() {
+  const meta = Number(data.config.meta) || 0;
+  const vendidas = totalSopas();
+  const pct = meta > 0 ? Math.min(100, Math.round((vendidas/meta)*100)) : 0;
+  const libres = Math.max(0, meta - vendidas);
+
+  $('#progress-card').innerHTML = `
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Progreso de la campaña</p>
+        <p class="mt-1 text-2xl font-extrabold text-slate-900">
+          <span>${vendidas}</span><span class="text-slate-300 mx-1">/</span><span>${meta}</span>
+          <span class="text-base font-semibold text-slate-500 ml-1">sopas</span>
+        </p>
+      </div>
+      <div class="text-right">
+        <p class="text-3xl font-extrabold text-brand-600 leading-none">${pct}%</p>
+        <p class="text-xs text-slate-500 mt-1">${libres === 0 ? '¡Meta completada!' : libres + ' disponibles'}</p>
+      </div>
+    </div>
+    <div class="mt-4 h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+      <div class="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-500" style="width:${pct}%"></div>
+    </div>`;
+}
+
+function renderStats() {
+  let cards;
+  const meta = Number(data.config.meta) || 0;
+  if (user.rol === 'admin' || user.rol === 'tesorero') {
+    cards = [
+      { label:'Recaudado',   value:money(totalRecaudado()),  icon:'wallet',       color:'text-emerald-600', bg:'bg-emerald-50' },
+      { label:'Conciliado',  value:money(totalConciliado()), icon:'badge-check',  color:'text-sky-600',    bg:'bg-sky-50' },
+      { label:'Entregadas',  value:totalEntregado(),         icon:'truck',        color:'text-brand-600',  bg:'bg-brand-50' },
+      { label:'Pendientes',  value:money(totalRecaudado()-totalConciliado()), icon:'clock', color:'text-amber-600', bg:'bg-amber-50' }
+    ];
+  } else if (user.rol === 'colaborador') {
+    const mias = data.ventas.filter(v => v.colaboradorEmail === user.email);
+    const sopas = mias.reduce((s,v) => s + Number(v.cantidad||0), 0);
+    const rec = mias.reduce((s,v) => s + Number(v.montoPagado||0), 0);
+    cards = [
+      { label:'Mis ventas',  value:mias.length,          icon:'receipt',      color:'text-brand-600',  bg:'bg-brand-50' },
+      { label:'Sopas',       value:sopas,                icon:'soup',         color:'text-sky-600',    bg:'bg-sky-50' },
+      { label:'Recaudado',   value:money(rec),           icon:'wallet',       color:'text-emerald-600', bg:'bg-emerald-50' },
+      { label:'Disponibles', value:Math.max(0, meta-sopas), icon:'package',   color:'text-amber-600',  bg:'bg-amber-50' }
+    ];
+  } else {
+    const listas = data.ventas.filter(v => v.conciliado && !v.entregado);
+    const ent = data.ventas.filter(v => v.entregado);
+    cards = [
+      { label:'Por entregar', value:listas.length,           icon:'package',      color:'text-sky-600',    bg:'bg-sky-50' },
+      { label:'Sopas por entregar', value:listas.reduce((s,v)=>s+Number(v.cantidad||0),0), icon:'soup', color:'text-brand-600', bg:'bg-brand-50' },
+      { label:'Entregadas hoy', value:ent.filter(v => esHoy(v.entregadoFecha)).length, icon:'check-circle-2', color:'text-emerald-600', bg:'bg-emerald-50' },
+      { label:'Total entregadas', value:ent.length,          icon:'truck',        color:'text-slate-600',  bg:'bg-slate-100' }
+    ];
+  }
+
+  $('#stats').innerHTML = cards.map(c => `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+      <div class="w-9 h-9 rounded-lg ${c.bg} ${c.color} grid place-items-center mb-3">
+        <i data-lucide="${c.icon}" style="width:18px;height:18px"></i>
+      </div>
+      <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">${c.label}</p>
+      <p class="text-xl font-extrabold text-slate-900 mt-0.5 truncate">${c.value}</p>
+    </div>`).join('');
+}
+function esHoy(iso) {
+  if (!iso) return false;
+  const d = new Date(iso), n = new Date();
+  return d.toDateString() === n.toDateString();
+}
+
+function renderTabs() {
+  $('#tabs').innerHTML = TABS[user.rol].map(t => `
+    <button data-tab="${t.id}"
+      class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition
+      ${activeTab === t.id ? 'bg-brand-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}">
+      <i data-lucide="${t.icon}" class="w-4 h-4"></i>${t.label}
+    </button>`).join('');
+}
+
+function renderPanel() {
+  const p = $('#panel');
+  if (user.rol === 'admin') {
+    if (activeTab === 'ventas') p.innerHTML = panelAdminVentas();
+    else if (activeTab === 'equipo') p.innerHTML = panelEquipo();
+    else if (activeTab === 'campaña') p.innerHTML = panelCampaña();
+    else if (activeTab === 'respaldo') p.innerHTML = panelRespaldo();
+  } else if (user.rol === 'colaborador') {
+    p.innerHTML = panelColaborador();
+  } else if (user.rol === 'tesorero') {
+    p.innerHTML = panelTesorero();
+  } else if (user.rol === 'despachador') {
+    p.innerHTML = panelDespachador();
+  }
+  bindPanel(); icons();
+}
+
+/* ═══════════════════════════════════════════════════════
+   Helper: ¿está incompleta la venta?
+   ═══════════════════════════════════════════════════════ */
+function estaIncompleta(v) {
+  return !v.cliente || !v.telefono || !v.ubicacion || !v.referencia || !v.montoPagado;
+}
+function badgeIncompleta(v) {
+  return estaIncompleta(v) ? `
+    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+      <i data-lucide="alert-triangle" class="w-3 h-3"></i> Incompleta
+    </span>` : '';
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL ADMIN · VENTAS
+   ═══════════════════════════════════════════════════════ */
+function panelAdminVentas() {
+  let list = ventasOrd();
+  if (filtros.search) {
+    const q = filtros.search.toLowerCase();
+    list = list.filter(v =>
+      (v.cliente||'').toLowerCase().includes(q) ||
+      (v.telefono||'').toLowerCase().includes(q) ||
+      (v.ubicacion||'').toLowerCase().includes(q) ||
+      (v.referencia||'').toLowerCase().includes(q));
+  }
+  if (filtros.conciliado === 'si') list = list.filter(v => v.conciliado);
+  if (filtros.conciliado === 'no') list = list.filter(v => !v.conciliado);
+  if (filtros.entregado === 'si')  list = list.filter(v => v.entregado);
+  if (filtros.entregado === 'no')  list = list.filter(v => !v.entregado);
+  if (filtros.colaborador)         list = list.filter(v => v.colaboradorEmail === filtros.colaborador);
+  if (filtros.incompletos)         list = list.filter(v => estaIncompleta(v));
+
+  const optCol = ['<option value="">Todos los colaboradores</option>']
+    .concat(data.colaboradores.map(c => `<option value="${esc(c.email)}" ${filtros.colaborador===c.email?'selected':''}>${esc(c.nombre)}</option>`))
+    .join('');
+
+  const totalIncompletas = data.ventas.filter(estaIncompleta).length;
+
+  return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-100 flex flex-wrap gap-3">
+        <div class="relative flex-1 min-w-[170px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="f-search" value="${esc(filtros.search)}" placeholder="Buscar cliente, referencia, ubicación..."
+            class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-400 outline-none">
+        </div>
+        <select id="f-conc" class="${IN} w-auto">
+          <option value="">Conciliación: todas</option>
+          <option value="si" ${filtros.conciliado==='si'?'selected':''}>Solo conciliadas</option>
+          <option value="no" ${filtros.conciliado==='no'?'selected':''}>Sin conciliar</option>
+        </select>
+        <select id="f-ent" class="${IN} w-auto">
+          <option value="">Entrega: todas</option>
+          <option value="si" ${filtros.entregado==='si'?'selected':''}>Entregadas</option>
+          <option value="no" ${filtros.entregado==='no'?'selected':''}>No entregadas</option>
+        </select>
+        <select id="f-col" class="${IN} w-auto">${optCol}</select>
+        <button id="f-incomp" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-xl border transition
+          ${filtros.incompletos ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i> Incompletas ${totalIncompletas ? `<span class="bg-amber-500 text-white text-[10px] px-1.5 rounded-full">${totalIncompletas}</span>` : ''}
+        </button>
+      </div>
+
+      <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs text-slate-500">
+        <b class="text-slate-800">${list.length}</b> registro(s) ·
+        <b class="text-slate-800">${list.reduce((s,v)=>s+Number(v.cantidad||0),0)}</b> sopa(s) ·
+        Total <b class="text-slate-800">${money(list.reduce((s,v)=>s+Number(v.montoPagado||0),0))}</b>
+      </div>
+
+      ${list.length === 0 ? vacio('Sin ventas', 'Ajusta filtros o espera registros de colaboradores.') : `
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-400 bg-slate-50/60">
+              <th class="px-3 py-3 font-bold">Cliente</th>
+              <th class="px-3 py-3 font-bold">Ubicación</th>
+              <th class="px-3 py-3 font-bold">Colaborador</th>
+              <th class="px-3 py-3 font-bold text-center">Cant.</th>
+              <th class="px-3 py-3 font-bold text-right">Monto</th>
+              <th class="px-3 py-3 font-bold">Referencia</th>
+              <th class="px-3 py-3 font-bold">Conciliado</th>
+              <th class="px-3 py-3 font-bold">Entregado</th>
+              <th class="px-3 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${list.map(v => filaAdmin(v)).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>`;
+}
+
+function filaAdmin(v) {
+  return `
+    <tr class="hover:bg-slate-50/70">
+      <td class="px-3 py-3">
+        <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
+        <p class="text-[11px] text-slate-400">${val(v.telefono,'')}</p>
+        <div class="mt-1">${badgeIncompleta(v)}</div>
+      </td>
+      <td class="px-3 py-3 text-slate-600 text-xs">
+        ${val(v.ubicacion,'Sin ubicación')}<br>
+        ${v.piso ? 'Piso '+esc(v.piso) : ''}${v.departamento ? ' · Depto '+esc(v.departamento) : ''}
+      </td>
+      <td class="px-3 py-3 text-slate-600 text-xs">${val(v.colaborador)}</td>
+      <td class="px-3 py-3 text-center font-bold">${v.cantidad||0}</td>
+      <td class="px-3 py-3 text-right font-bold">${v.montoPagado ? money(v.montoPagado) : '<span class="missing">sin monto</span>'}</td>
+      <td class="px-3 py-3 text-xs text-slate-600 font-mono">${val(v.referencia,'—')}</td>
+      <td class="px-3 py-3">
+        <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
+          ${v.conciliado ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">
+          <i data-lucide="${v.conciliado ? 'badge-check' : 'clock'}" class="w-3 h-3"></i>
+          ${v.conciliado ? 'Sí' : 'No'}
+        </span>
+      </td>
+      <td class="px-3 py-3">
+        <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
+          ${v.entregado ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}">
+          <i data-lucide="${v.entregado ? 'check-circle-2' : 'package'}" class="w-3 h-3"></i>
+          ${v.entregado ? 'Sí' : 'No'}
+        </span>
+      </td>
+      <td class="px-3 py-3 text-right">
+        <button data-action="edit" data-id="${v.id}" title="Editar"
+          class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
+          <i data-lucide="pencil" class="w-4 h-4"></i>
+        </button>
+        <button data-action="del" data-id="${v.id}" title="Eliminar"
+          class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </td>
+    </tr>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL ADMIN · EQUIPO
+   ═══════════════════════════════════════════════════════ */
+function panelEquipo() {
+  const base = location.origin === 'null' ? location.href.split('?')[0] : location.origin + location.pathname;
+  const linkCol = c => `${base}?rol=colaborador&email=${encodeURIComponent(c.email)}`;
+  const linkTes = e => `${base}?rol=tesorero&email=${encodeURIComponent(e)}`;
+  const linkDes = d => `${base}?rol=despachador&email=${encodeURIComponent(d.email)}`;
+
+  const colRows = data.colaboradores.map(c => personaRow('colaborador', c, linkCol(c), 'user-pen')).join('');
+  const desRows = data.despachadores.map(d => personaRow('despachador', d, linkDes(d), 'truck')).join('');
+  const tesBlock = data.tesoreroEmail
+    ? personaRow('tesorero', {nombre:'Tesorería', email:data.tesoreroEmail}, linkTes(data.tesoreroEmail), 'banknote')
+    : `<div class="p-4 text-sm text-slate-500 italic">Sin tesorero asignado.</div>`;
+
+  return `
+    <div class="grid lg:grid-cols-3 gap-5">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 grid place-items-center">
+              <i data-lucide="user-pen" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 leading-tight">Colaboradores</h3>
+              <p class="text-[11px] text-slate-500">Registran ventas y pagos</p>
+            </div>
+          </div>
+        </div>
+        <form data-add="colaborador" class="p-4 border-b border-slate-100 space-y-2">
+          <input name="nombre" placeholder="Nombre" required maxlength="40" class="${IN}">
+          <input name="email" type="email" placeholder="correo@ejemplo.com" required class="${IN}">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition active:scale-[.98]">
+            <i data-lucide="user-plus" class="w-4 h-4"></i> Agregar colaborador
+          </button>
+        </form>
+        <div>${colRows || '<p class="p-4 text-xs text-slate-400 italic text-center">Sin colaboradores aún.</p>'}</div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 grid place-items-center">
+              <i data-lucide="banknote" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 leading-tight">Tesorería</h3>
+              <p class="text-[11px] text-slate-500">Conciliación bancaria</p>
+            </div>
+          </div>
+        </div>
+        <form data-add="tesorero" class="p-4 border-b border-slate-100 space-y-2">
+          <input name="email" type="email" value="${esc(data.tesoreroEmail)}" placeholder="tesorero@ejemplo.com" required class="${IN}">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition active:scale-[.98]">
+            <i data-lucide="save" class="w-4 h-4"></i> Guardar tesorero
+          </button>
+        </form>
+        <div>${tesBlock}</div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 grid place-items-center">
+              <i data-lucide="truck" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 leading-tight">Despachadores</h3>
+              <p class="text-[11px] text-slate-500">Entregan a domicilio</p>
+            </div>
+          </div>
+        </div>
+        <form data-add="despachador" class="p-4 border-b border-slate-100 space-y-2">
+          <input name="nombre" placeholder="Nombre" required maxlength="40" class="${IN}">
+          <input name="email" type="email" placeholder="correo@ejemplo.com" required class="${IN}">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition active:scale-[.98]">
+            <i data-lucide="plus" class="w-4 h-4"></i> Agregar despachador
+          </button>
+        </form>
+        <div>${desRows || '<p class="p-4 text-xs text-slate-400 italic text-center">Sin despachadores aún.</p>'}</div>
+      </div>
+    </div>`;
+}
+
+function personaRow(tipo, persona, link, icon) {
+  return `
+    <div class="flex items-center gap-3 p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
+      <div class="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 grid place-items-center shrink-0">
+        <i data-lucide="${icon}" class="w-4 h-4"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="font-semibold text-sm text-slate-800 truncate">${esc(persona.nombre)}</p>
+        <p class="text-[11px] text-slate-500 truncate">${esc(persona.email)}</p>
+      </div>
+      <button data-copy="${esc(link)}" title="Copiar enlace"
+        class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
+        <i data-lucide="link" class="w-4 h-4"></i>
+      </button>
+      ${tipo !== 'tesorero' ? `
+      <button data-remove="${tipo}" data-email="${esc(persona.email)}" title="Eliminar"
+        class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+      </button>` : ''}
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL ADMIN · CAMPAÑA
+   ═══════════════════════════════════════════════════════ */
+function panelCampaña() {
+  const c = data.config;
+  return `
+    <div class="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <h3 class="font-bold text-slate-900">Configuración de la campaña</h3>
+      <p class="text-xs text-slate-500 mt-0.5 mb-4">Estos valores alimentan todos los cálculos.</p>
+      <form id="form-config" class="space-y-3">
+        <div>
+          <label class="${LBL}">Título</label>
+          <input name="titulo" value="${esc(c.titulo)}" class="${IN}">
+        </div>
+        <div>
+          <label class="${LBL}">Beneficiario / causa</label>
+          <input name="beneficiario" value="${esc(c.beneficiario)}" class="${IN}">
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="${LBL}">Meta sopas</label>
+            <input name="meta" type="number" min="1" value="${esc(c.meta)}" class="${IN}">
+          </div>
+          <div>
+            <label class="${LBL}">Precio</label>
+            <input name="precio" type="number" min="0" step="0.01" value="${esc(c.precio)}" class="${IN}">
+          </div>
+          <div>
+            <label class="${LBL}">Moneda</label>
+            <input name="moneda" maxlength="4" value="${esc(c.moneda)}" class="${IN}">
+          </div>
+        </div>
+        <button class="w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition active:scale-[.98]">
+          <i data-lucide="save" class="w-4 h-4"></i> Guardar configuración
+        </button>
+      </form>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL ADMIN · RESPALDO
+   ═══════════════════════════════════════════════════════ */
+function panelRespaldo() {
+  return `
+    <div class="grid lg:grid-cols-2 gap-5">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <h3 class="font-bold text-slate-900">Exportar datos</h3>
+        <p class="text-xs text-slate-500 mt-0.5 mb-4">Descarga toda la data para Excel o respaldo.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button id="btn-xls" class="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2.5 rounded-xl transition">
+            <i data-lucide="sheet" class="w-4 h-4"></i> Excel (CSV)
+          </button>
+          <button id="btn-json" class="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-3 py-2.5 rounded-xl transition">
+            <i data-lucide="download" class="w-4 h-4"></i> JSON
+          </button>
+        </div>
+        <label class="mt-3 flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-brand-300 hover:bg-brand-50/40 text-slate-500 text-sm font-semibold px-3 py-3 rounded-xl cursor-pointer transition">
+          <i data-lucide="upload" class="w-4 h-4"></i> Importar respaldo JSON
+          <input id="file-import" type="file" accept=".json" class="hidden">
+        </label>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-rose-200 shadow-sm p-5">
+        <h3 class="font-bold text-rose-700">Zona de riesgo</h3>
+        <p class="text-xs text-slate-500 mt-0.5 mb-4">Acciones irreversibles.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button id="btn-clear-sales" class="inline-flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-semibold px-3 py-2.5 rounded-xl border border-rose-200 transition">
+            <i data-lucide="eraser" class="w-4 h-4"></i> Borrar ventas
+          </button>
+          <button id="btn-reset" class="inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-3 py-2.5 rounded-xl transition">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reiniciar todo
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL COLABORADOR
+   ═══════════════════════════════════════════════════════ */
+function panelColaborador() {
+  const mias = ventasOrd().filter(v => v.colaboradorEmail === user.email);
+  return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-900">Mis ventas registradas</h3>
+          <p class="text-xs text-slate-500 mt-0.5">${mias.length} registro(s) · puedes editar cuando quieras</p>
+        </div>
+        <button id="btn-new-inline" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition">
+          <i data-lucide="plus" class="w-4 h-4"></i> Nueva venta
+        </button>
+      </div>
+      ${mias.length === 0 ? vacio('Aún no has registrado ventas', 'Puedes empezar con solo la cantidad y completar después.') : `
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-400 bg-slate-50/60">
+              <th class="px-3 py-3 font-bold">Cliente</th>
+              <th class="px-3 py-3 font-bold">Ubicación</th>
+              <th class="px-3 py-3 font-bold text-center">Cant.</th>
+              <th class="px-3 py-3 font-bold text-right">Monto</th>
+              <th class="px-3 py-3 font-bold">Referencia</th>
+              <th class="px-3 py-3 font-bold">Conciliado</th>
+              <th class="px-3 py-3 font-bold">Entregado</th>
+              <th class="px-3 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${mias.map(v => `
+              <tr class="hover:bg-slate-50/70">
+                <td class="px-3 py-3">
+                  <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
+                  <p class="text-[11px] text-slate-400">${val(v.telefono,'')}</p>
+                  <div class="mt-1">${badgeIncompleta(v)}</div>
+                </td>
+                <td class="px-3 py-3 text-xs text-slate-600">
+                  ${val(v.ubicacion,'Sin ubicación')}<br>
+                  ${v.piso?'Piso '+esc(v.piso):''}${v.departamento?' · Depto '+esc(v.departamento):''}
+                </td>
+                <td class="px-3 py-3 text-center font-bold">${v.cantidad||0}</td>
+                <td class="px-3 py-3 text-right font-bold">${v.montoPagado ? money(v.montoPagado) : '<span class="missing">sin monto</span>'}</td>
+                <td class="px-3 py-3 text-xs font-mono text-slate-600">${val(v.referencia,'—')}</td>
+                <td class="px-3 py-3">
+                  <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
+                    ${v.conciliado?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">
+                    <i data-lucide="${v.conciliado?'badge-check':'clock'}" class="w-3 h-3"></i> ${v.conciliado?'Sí':'No'}
+                  </span>
+                </td>
+                <td class="px-3 py-3">
+                  <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
+                    ${v.entregado?'bg-sky-50 text-sky-700':'bg-slate-100 text-slate-600'}">
+                    <i data-lucide="${v.entregado?'check-circle-2':'package'}" class="w-3 h-3"></i> ${v.entregado?'Sí':'No'}
+                  </span>
+                </td>
+                <td class="px-3 py-3 text-right whitespace-nowrap">
+                  <button data-action="edit" data-id="${v.id}" title="Editar"
+                    class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </button>
+                  <button data-action="del" data-id="${v.id}" title="Eliminar"
+                    class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL TESORERO · CONCILIACIÓN
+   ═══════════════════════════════════════════════════════ */
+function panelTesorero() {
+  let list = ventasOrd();
+  if (filtros.search) {
+    const q = filtros.search.toLowerCase();
+    list = list.filter(v => (v.cliente||'').toLowerCase().includes(q) || (v.referencia||'').toLowerCase().includes(q));
+  }
+  if (filtros.conciliado === 'si') list = list.filter(v => v.conciliado);
+  if (filtros.conciliado === 'no') list = list.filter(v => !v.conciliado);
+  if (filtros.incompletos)         list = list.filter(v => estaIncompleta(v));
+
+  const totalIncompletas = data.ventas.filter(estaIncompleta).length;
+
+  return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
+        <div class="relative flex-1 min-w-[170px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="f-search" value="${esc(filtros.search)}" placeholder="Buscar referencia o cliente..."
+            class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-400 outline-none">
+        </div>
+        <select id="f-conc" class="${IN} w-auto">
+          <option value="">Todas</option>
+          <option value="si" ${filtros.conciliado==='si'?'selected':''}>Conciliadas</option>
+          <option value="no" ${filtros.conciliado==='no'?'selected':''}>Pendientes</option>
+        </select>
+        <button id="f-incomp" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-xl border transition
+          ${filtros.incompletos ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i> Incompletas ${totalIncompletas ? `<span class="bg-amber-500 text-white text-[10px] px-1.5 rounded-full">${totalIncompletas}</span>` : ''}
+        </button>
+        <button id="btn-xls-tes" class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition">
+          <i data-lucide="sheet" class="w-4 h-4"></i> Excel
+        </button>
+      </div>
+
+      ${list.length === 0 ? vacio('Sin registros', 'No hay ventas que conciliar.') : `
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wider text-slate-400 bg-slate-50/60">
+              <th class="px-3 py-3 font-bold text-center">Conciliar</th>
+              <th class="px-3 py-3 font-bold">Fecha</th>
+              <th class="px-3 py-3 font-bold">Colaborador</th>
+              <th class="px-3 py-3 font-bold">Cliente</th>
+              <th class="px-3 py-3 font-bold">Referencia bancaria</th>
+              <th class="px-3 py-3 font-bold text-right">Monto</th>
+              <th class="px-3 py-3 font-bold">Nota</th>
+              <th class="px-3 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${list.map(v => `
+              <tr class="hover:bg-slate-50/70 ${estaIncompleta(v) ? 'bg-amber-50/40' : ''}">
+                <td class="px-3 py-3 text-center">
+                  <input type="checkbox" data-conc="${v.id}" ${v.conciliado?'checked':''}
+                    class="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer">
+                </td>
+                <td class="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">${fmt(v.fecha)}</td>
+                <td class="px-3 py-3 text-xs text-slate-600">${val(v.colaborador)}</td>
+                <td class="px-3 py-3">
+                  <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
+                  <p class="text-[11px] text-slate-400">${v.cantidad||0} sopa(s)</p>
+                  <div class="mt-1">${badgeIncompleta(v)}</div>
+                </td>
+                <td class="px-3 py-3 font-mono text-xs text-slate-700">${val(v.referencia,'—')}</td>
+                <td class="px-3 py-3 text-right font-bold text-slate-800">${v.montoPagado ? money(v.montoPagado) : '<span class="missing">sin monto</span>'}</td>
+                <td class="px-3 py-3">
+                  <input type="text" data-nota="${v.id}" value="${esc(v.notaConciliacion||'')}"
+                    placeholder="Agregar nota..."
+                    class="w-full min-w-[150px] px-2 py-1 text-xs rounded-lg border border-slate-200 focus:border-brand-400 outline-none">
+                </td>
+                <td class="px-3 py-3 text-right">
+                  <button data-action="edit" data-id="${v.id}" title="Editar"
+                    class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PANEL DESPACHADOR · MOBILE
+   ═══════════════════════════════════════════════════════ */
+function panelDespachador() {
+  const list = ventasOrd().filter(v => v.conciliado);
+  const pendientes = list.filter(v => !v.entregado);
+  const entregadas = list.filter(v => v.entregado);
+
+  return `
+    <div class="space-y-5">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-900">Entregas</h2>
+          <p class="text-xs text-slate-500">${pendientes.length} pendiente(s) · ${entregadas.length} entregada(s)</p>
+        </div>
+      </div>
+
+      ${pendientes.length === 0 ? vacio('Sin entregas pendientes', 'Cuando el tesorero concilie pagos, aparecerán aquí.') : `
+      <div class="grid sm:grid-cols-2 gap-3">
+        ${pendientes.map(v => cardEntrega(v)).join('')}
+      </div>`}
+
+      ${entregadas.length > 0 ? `
+        <div class="pt-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Entregadas recientemente</h3>
+          <div class="grid sm:grid-cols-2 gap-3">
+            ${entregadas.slice(0, 8).map(v => cardEntrega(v, true)).join('')}
+          </div>
+        </div>` : ''}
+    </div>`;
+}
+
+function cardEntrega(v, done = false) {
+  return `
+    <div class="bg-white rounded-2xl border ${done ? 'border-slate-200 opacity-70' : 'border-brand-200 shadow-sm'} p-4">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <p class="font-bold text-slate-900 leading-tight truncate">${val(v.cliente,'Sin nombre')}</p>
+          <p class="text-xs ${v.telefono ? 'text-slate-500' : 'missing'}">${v.telefono || 'sin teléfono'}</p>
+        </div>
+        <span class="shrink-0 inline-flex items-center gap-1 bg-brand-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+          <i data-lucide="soup" class="w-3 h-3"></i>${v.cantidad||0}
+        </span>
+      </div>
+
+      <div class="mt-3 space-y-1.5 text-sm">
+        <div class="flex items-start gap-2 ${v.ubicacion ? 'text-slate-700' : 'missing'}">
+          <i data-lucide="map-pin" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
+          <span>${v.ubicacion || 'Sin ubicación'}${v.piso?` · Piso ${esc(v.piso)}`:''}${v.departamento?` · Depto ${esc(v.departamento)}`:''}</span>
+        </div>
+        ${v.nota ? `<div class="flex items-start gap-2 text-slate-500 text-xs">
+          <i data-lucide="sticky-note" class="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5"></i>
+          <span>${esc(v.nota)}</span>
+        </div>` : ''}
+      </div>
+
+      <div class="mt-3 flex items-center justify-between gap-2">
+        <div class="text-[11px] ${v.referencia ? 'text-slate-400 font-mono' : 'missing'} truncate">Ref: ${v.referencia || '—'}</div>
+        ${done ? `
+          <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Entregado
+          </span>` : `
+          <button data-ent="${v.id}"
+            class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition">
+            <i data-lucide="check" class="w-4 h-4"></i> Entregar
+          </button>`}
+      </div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODAL · NUEVA / EDITAR VENTA  ·  CAMPOS OPCIONALES
+   ═══════════════════════════════════════════════════════ */
+function openModal(id = null) {
+  const editando = id ? data.ventas.find(v => v.id === id) : null;
+  const yaVendidas = totalSopas() - (editando ? Number(editando.cantidad) : 0);
+  const disponibles = Math.max(0, Number(data.config.meta) - yaVendidas);
+  if (!editando && disponibles <= 0) return toast('No quedan sopas disponibles', 'error');
+
+  const v = editando || {
+    cliente:'', telefono:'', ubicacion:'', piso:'', departamento:'',
+    cantidad:1, referencia:'', montoPagado:'', metodo:'transferencia', nota:''
+  };
+
+  const optHelp = 'text-[10px] text-slate-400 mt-1 block';
+
+  $('#modal-box').innerHTML = `
+    <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden fade-in">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 grid place-items-center">
+            <i data-lucide="${editando?'pencil':'soup'}" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 leading-tight">${editando?'Editar venta':'Registrar venta'}</h3>
+            <p class="text-xs text-slate-500">${disponibles} sopa(s) disponibles · puedes completar después</p>
+          </div>
+        </div>
+        <button id="modal-close" class="w-9 h-9 grid place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-venta" class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div class="sm:col-span-2">
+            <label class="${LBL}">Nombre del cliente</label>
+            <input name="cliente" maxlength="60" value="${esc(v.cliente)}" placeholder="Opcional · completa cuando lo sepas" class="${IN}">
+          </div>
+          <div>
+            <label class="${LBL}">Teléfono</label>
+            <input name="telefono" maxlength="25" value="${esc(v.telefono)}" placeholder="Opcional" class="${IN}">
+          </div>
+          <div>
+            <label class="${LBL}">Ubicación / Sector</label>
+            <input name="ubicacion" maxlength="80" value="${esc(v.ubicacion)}" placeholder="Opcional" class="${IN}">
+          </div>
+          <div>
+            <label class="${LBL}">Piso</label>
+            <input name="piso" maxlength="10" value="${esc(v.piso)}" placeholder="Opcional" class="${IN}">
+          </div>
+          <div>
+            <label class="${LBL}">Departamento</label>
+            <input name="departamento" maxlength="10" value="${esc(v.departamento)}" placeholder="Opcional" class="${IN}">
+          </div>
+
+          <div class="sm:col-span-2 pt-2 border-t border-slate-100">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Datos del pago</p>
+          </div>
+
+          <div>
+            <label class="${LBL}">Cantidad de sopas *</label>
+            <input name="cantidad" id="in-cant" type="number" min="1" max="${disponibles}" value="${v.cantidad}" class="${IN} text-center font-bold">
+            <span class="${optHelp}">Lo único obligatorio. El resto puede quedar vacío.</span>
+          </div>
+          <div>
+            <label class="${LBL}">Método</label>
+            <select name="metodo" class="${IN}">
+              <option value="transferencia" ${v.metodo==='transferencia'?'selected':''}>📱 Transferencia</option>
+              <option value="efectivo"      ${v.metodo==='efectivo'?'selected':''}>💵 Efectivo</option>
+              <option value="otro"          ${v.metodo==='otro'?'selected':''}>🔁 Otro</option>
+            </select>
+          </div>
+          <div>
+            <label class="${LBL}">N° referencia bancaria</label>
+            <input name="referencia" maxlength="40" value="${esc(v.referencia)}" placeholder="Opcional" class="${IN} font-mono">
+          </div>
+          <div>
+            <label class="${LBL}">Monto pagado</label>
+            <input name="montoPagado" id="in-monto" type="number" min="0" step="0.01" value="${esc(v.montoPagado)}" placeholder="Opcional" class="${IN}">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="${LBL}">Nota</label>
+            <textarea name="nota" rows="2" maxlength="140" placeholder="Opcional" class="${IN} resize-none">${esc(v.nota||'')}</textarea>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-1">
+          <button type="button" id="modal-cancel" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+            Cancelar
+          </button>
+          <button type="submit" class="flex-1 inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition active:scale-[.98]">
+            <i data-lucide="${editando?'save':'check'}" class="w-4 h-4"></i>
+            ${editando?'Guardar cambios':'Registrar venta'}
+          </button>
+        </div>
+      </form>
+    </div>`;
+
+  $('#modal').classList.remove('hidden');
+  document.body.classList.add('overflow-hidden');
+  icons();
+
+  const cerrar = () => {
+    $('#modal').classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+    $('#modal-box').innerHTML = '';
+  };
+  $('#modal-close').onclick = cerrar;
+  $('#modal-cancel').onclick = cerrar;
+  $('#modal').onclick = e => { if (e.target.id === 'modal') cerrar(); };
+  const onEsc = e => { if (e.key === 'Escape') { cerrar(); document.removeEventListener('keydown', onEsc); } };
+  document.addEventListener('keydown', onEsc);
+
+  setTimeout(() => $('[name="cliente"]')?.focus(), 60);
+
+  $('#form-venta').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const cantidad = Number(f.get('cantidad'));
+    const montoRaw = String(f.get('montoPagado')||'').trim();
+    const montoPagado = montoRaw === '' ? 0 : Number(montoRaw);
+
+    // Única validación: cantidad razonable
+    if (!Number.isFinite(cantidad) || cantidad < 1) return toast('La cantidad debe ser al menos 1', 'error');
+    if (cantidad > disponibles) return toast(`Solo quedan ${disponibles} sopa(s)`, 'error');
+    if (montoRaw !== '' && (!Number.isFinite(montoPagado) || montoPagado < 0))
+      return toast('Monto inválido', 'error');
+
+    const payload = {
+      cliente: String(f.get('cliente')||'').trim(),
+      telefono: String(f.get('telefono')||'').trim(),
+      ubicacion: String(f.get('ubicacion')||'').trim(),
+      piso: String(f.get('piso')||'').trim(),
+      departamento: String(f.get('departamento')||'').trim(),
+      cantidad,
+      metodo: String(f.get('metodo')||'transferencia'),
+      referencia: String(f.get('referencia')||'').trim(),
+      montoPagado,
+      nota: String(f.get('nota')||'').trim(),
+      colaborador: user.nombre,
+      colaboradorEmail: user.email
+    };
+
+    if (editando) {
+      const idx = data.ventas.findIndex(x => x.id === editando.id);
+      data.ventas[idx] = { ...data.ventas[idx], ...payload };
+      toast('Venta actualizada');
+    } else {
+      data.ventas.push({
+        id: uid(), fecha: new Date().toISOString(), ...payload,
+        conciliado:false, conciliadoPor:null, conciliadoFecha:null, notaConciliacion:'',
+        entregado:false, entregadoPor:null, entregadoFecha:null
+      });
+      toast(`Venta registrada · ${cantidad} sopa(s)`);
+    }
+    guardar(); cerrar(); render();
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════════════════ */
+function vacio(titulo, sub) {
+  return `<div class="py-16 text-center">
+    <div class="w-14 h-14 mx-auto rounded-2xl bg-slate-100 text-slate-400 grid place-items-center mb-3">
+      <i data-lucide="inbox" class="w-6 h-6"></i>
+    </div>
+    <p class="font-semibold text-slate-700">${titulo}</p>
+    <p class="text-sm text-slate-400 mt-1">${sub}</p>
+  </div>`;
+}
+
+function descargar(nombre, contenido, tipo) {
+  const blob = new Blob([contenido], {type: tipo});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function fechaArchivo() {
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+function exportarCSV() {
+  const head = ['Fecha','Colaborador','Cliente','Telefono','Ubicacion','Piso','Departamento',
+                'Cantidad','PrecioUnit','MontoPagado','Metodo','Referencia',
+                'Conciliado','NotaConciliacion','Entregado','FechaConciliacion','FechaEntrega'];
+  const rows = ventasOrd().map(v => [
+    new Date(v.fecha).toLocaleString('es-CO'),
+    v.colaborador||'', v.cliente||'', v.telefono||'', v.ubicacion||'', v.piso||'', v.departamento||'',
+    v.cantidad||0, precio(), v.montoPagado||0, v.metodo||'', v.referencia||'',
+    v.conciliado ? 'SI' : 'NO', v.notaConciliacion || '',
+    v.entregado ? 'SI' : 'NO',
+    v.conciliadoFecha ? new Date(v.conciliadoFecha).toLocaleString('es-CO') : '',
+    v.entregadoFecha ? new Date(v.entregadoFecha).toLocaleString('es-CO') : ''
+  ]);
+  const csv = [head, ...rows].map(r => r.map(c => `"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  descargar(`sopas_ventas_${fechaArchivo()}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8');
+  toast('Excel (CSV) descargado');
+}
+
+/* ═══════════════════════════════════════════════════════
+   EVENTOS
+   ═══════════════════════════════════════════════════════ */
+$('#panel').addEventListener('click', e => {
+  const tb = e.target.closest('[data-tab]');
+  if (tb) { activeTab = tb.dataset.tab; render(); return; }
+
+  if (e.target.closest('#btn-new-inline')) { openModal(); return; }
+
+  const cp = e.target.closest('[data-copy]');
+  if (cp) {
+    const link = cp.dataset.copy;
+    navigator.clipboard?.writeText(link).then(() => toast('Enlace copiado')).catch(() => prompt('Copia el enlace:', link));
+    return;
+  }
+
+  const rm = e.target.closest('[data-remove]');
+  if (rm) {
+    const tipo = rm.dataset.remove, email = rm.dataset.email;
+    if (!confirm(`¿Eliminar este ${tipo}?`)) return;
+    if (tipo === 'colaborador') data.colaboradores = data.colaboradores.filter(c => c.email !== email);
+    if (tipo === 'despachador') data.despachadores = data.despachadores.filter(d => d.email !== email);
+    guardar(); render(); renderSelect();
+    toast('Eliminado');
+    return;
+  }
+
+  const act = e.target.closest('[data-action]');
+  if (act) {
+    const id = act.dataset.id, venta = data.ventas.find(v => v.id === id);
+    if (!venta) return;
+    if (act.dataset.action === 'edit') {
+      // Colaborador solo edita las suyas
+      if (user.rol === 'colaborador' && venta.colaboradorEmail !== user.email)
+        return toast('No puedes editar ventas de otro colaborador', 'error');
+      openModal(id);
+    }
+    if (act.dataset.action === 'del') {
+      if (user.rol === 'colaborador' && venta.colaboradorEmail !== user.email)
+        return toast('No puedes eliminar ventas de otro colaborador', 'error');
+      if (!confirm(`¿Eliminar la venta de "${venta.cliente || 'Sin nombre'}"?`)) return;
+      data.ventas = data.ventas.filter(v => v.id !== id);
+      guardar(); render(); toast('Venta eliminada');
+    }
+    return;
+  }
+
+  const ent = e.target.closest('[data-ent]');
+  if (ent) {
+    const v = data.ventas.find(x => x.id === ent.dataset.ent);
+    if (!v) return;
+    v.entregado = true;
+    v.entregadoPor = user.nombre;
+    v.entregadoFecha = new Date().toISOString();
+    guardar(); render(); toast('Entrega registrada');
+    return;
+  }
+
+  // Filtro incompletas
+  if (e.target.closest('#f-incomp')) {
+    filtros.incompletos = !filtros.incompletos;
+    renderPanel();
+    return;
+  }
+});
+
+$('#panel').addEventListener('change', e => {
+  const chk = e.target.closest('[data-conc]');
+  if (chk) {
+    const v = data.ventas.find(x => x.id === chk.dataset.conc);
+    if (!v) return;
+    v.conciliado = chk.checked;
+    v.conciliadoPor = chk.checked ? user.nombre : null;
+    v.conciliadoFecha = chk.checked ? new Date().toISOString() : null;
+    guardar(); render();
+    toast(chk.checked ? 'Marcada como conciliada' : 'Conciliación retirada', 'info');
+  }
+});
+
+let notaTimer;
+$('#panel').addEventListener('input', e => {
+  const n = e.target.closest('[data-nota]');
+  if (n) {
+    clearTimeout(notaTimer);
+    notaTimer = setTimeout(() => {
+      const v = data.ventas.find(x => x.id === n.dataset.nota);
+      if (v) { v.notaConciliacion = n.value; guardar(); }
+    }, 500);
+  }
+  const s = e.target.closest('#f-search');
+  if (s) { filtros.search = s.value; renderPanel(); $('#f-search')?.focus(); }
+});
+
+$('#panel').addEventListener('change', e => {
+  if (e.target.id === 'f-conc') { filtros.conciliado = e.target.value; renderPanel(); }
+  if (e.target.id === 'f-ent')  { filtros.entregado = e.target.value; renderPanel(); }
+  if (e.target.id === 'f-col')  { filtros.colaborador = e.target.value; renderPanel(); }
+});
+
+$('#panel').addEventListener('submit', e => {
+  const addForm = e.target.closest('[data-add]');
+  if (addForm) {
+    e.preventDefault();
+    const tipo = addForm.dataset.add;
+    const f = new FormData(addForm);
+    if (tipo === 'colaborador' || tipo === 'despachador') {
+      const nombre = String(f.get('nombre')||'').trim();
+      const email = String(f.get('email')||'').trim().toLowerCase();
+      if (!nombre || !email) return toast('Completa nombre y correo', 'error');
+      const lista = tipo === 'colaborador' ? data.colaboradores : data.despachadores;
+      if (lista.some(x => x.email.toLowerCase() === email)) return toast('Ese correo ya existe', 'error');
+      lista.push({ nombre, email });
+      guardar(); render(); renderSelect(); toast(`${tipo === 'colaborador' ? 'Colaborador' : 'Despachador'} agregado`);
+    }
+    if (tipo === 'tesorero') {
+      const email = String(f.get('email')||'').trim().toLowerCase();
+      if (!email) return toast('Ingresa un correo', 'error');
+      data.tesoreroEmail = email;
+      guardar(); render(); renderSelect(); toast('Tesorero guardado');
+    }
+    return;
+  }
+
+  if (e.target.id === 'form-config') {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const meta = Math.max(1, Number(f.get('meta')) || 1);
+    if (totalSopas() > meta) return toast(`Ya hay ${totalSopas()} sopas vendidas`, 'error');
+    data.config = {
+      titulo: String(f.get('titulo')).trim() || 'Campaña de Sopas',
+      beneficiario: String(f.get('beneficiario')).trim() || 'Causa solidaria',
+      meta,
+      precio: Math.max(0, Number(f.get('precio')) || 0),
+      moneda: String(f.get('moneda')).trim() || '$'
+    };
+    guardar(); render(); renderSelect(); toast('Configuración guardada');
+    return;
+  }
+});
+
+$('#panel').addEventListener('click', e => {
+  if (e.target.closest('#btn-xls'))     exportarCSV();
+  if (e.target.closest('#btn-xls-tes')) exportarCSV();
+  if (e.target.closest('#btn-json')) {
+    descargar(`sopas_respaldo_${fechaArchivo()}.json`, JSON.stringify(data, null, 2), 'application/json');
+    toast('Respaldo JSON descargado');
+  }
+  if (e.target.closest('#btn-clear-sales')) {
+    if (!data.ventas.length) return toast('No hay ventas', 'info');
+    if (!confirm(`¿Borrar ${data.ventas.length} ventas? Irreversible.`)) return;
+    data.ventas = []; guardar(); render(); toast('Ventas eliminadas');
+  }
+  if (e.target.closest('#btn-reset')) {
+    if (!confirm('¿Reiniciar TODO el sistema? Se perderán ventas, equipo y configuración.')) return;
+    data = seed(); guardar(); render(); renderSelect(); toast('Sistema reiniciado');
+  }
+});
+
+$('#panel').addEventListener('change', e => {
+  if (e.target.id !== 'file-import') return;
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const p = JSON.parse(ev.target.result);
+      if (!p || !Array.isArray(p.ventas)) throw new Error('Formato inválido');
+      if (!confirm('Esto reemplazará todos los datos. ¿Continuar?')) return;
+      const base = seed();
+      data = {
+        config: { ...base.config, ...(p.config||{}) },
+        colaboradores: Array.isArray(p.colaboradores) ? p.colaboradores : [],
+        tesoreroEmail: typeof p.tesoreroEmail === 'string' ? p.tesoreroEmail : '',
+        despachadores: Array.isArray(p.despachadores) ? p.despachadores : [],
+        ventas: p.ventas
+      };
+      guardar(); render(); renderSelect(); toast('Respaldo restaurado');
+    } catch (err) { toast('Archivo inválido: ' + err.message, 'error'); }
+  };
+  r.readAsText(file);
+  e.target.value = '';
+});
+
+$('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]');
+  if (b) { activeTab = b.dataset.tab; render(); }
+});
+
+$('#btn-new').addEventListener('click', () => openModal());
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════════════ */
+(function init() {
+  icons();
+  if (!user) {
+    $('#screen-select').classList.remove('hidden');
+    $('#screen-app').classList.add('hidden');
+    renderSelect();
+    return;
+  }
+  $('#screen-select').classList.add('hidden');
+  $('#screen-app').classList.remove('hidden');
+  render();
+})();
+</script>
+</body>
+</html>
