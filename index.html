@@ -29,12 +29,33 @@ tailwind.config = {
   input[type=number]::-webkit-outer-spin-button,
   input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
   .missing{ color:#94a3b8; font-style:italic; font-size:.75rem; }
+  .inline-edit{
+    background:transparent; border:1.5px solid transparent; border-radius:7px;
+    padding:3px 6px; width:100%; font:inherit; color:inherit;
+    transition:all .12s; cursor:text;
+  }
+  .inline-edit:hover{ background:#f8fafc; border-color:#e2e8f0; }
+  .inline-edit:focus{
+    background:#fff; border-color:#fb923c;
+    box-shadow:0 0 0 3px rgba(251,146,60,.15); outline:none;
+  }
+  .inline-edit::placeholder{ color:#cbd5e1; font-style:italic; font-weight:400; }
+  .loading{ position:fixed; inset:0; background:rgba(255,255,255,.85); backdrop-filter:blur(4px); z-index:100; display:grid; place-items:center; }
+  .spinner{ width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#f97316; border-radius:50%; animation: spin .8s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen">
 
+<div id="loading-screen" class="loading">
+  <div class="text-center">
+    <div class="spinner mx-auto"></div>
+    <p class="text-sm text-slate-500 mt-3 font-medium">Cargando datos...</p>
+  </div>
+</div>
+
 <!-- ═══════════ SELECCIÓN ═══════════ -->
-<div id="screen-select" class="min-h-screen flex items-center justify-center p-5">
+<div id="screen-select" class="hidden min-h-screen items-center justify-center p-5" style="display:none">
   <div class="w-full max-w-2xl">
     <div class="text-center mb-8">
       <div class="w-16 h-16 mx-auto rounded-2xl bg-brand-500 text-white grid place-items-center shadow-lg shadow-brand-500/30">
@@ -43,7 +64,6 @@ tailwind.config = {
       <h1 id="sel-title" class="mt-5 text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Campaña de Sopas Solidarias</h1>
       <p id="sel-sub" class="text-slate-500 mt-2">Acceso por enlace personal · Sin contraseñas</p>
     </div>
-
     <a href="?rol=admin"
        class="group block bg-slate-900 rounded-2xl shadow-sm hover:shadow-lg p-6 flex items-center gap-4 transition mb-4">
       <div class="w-12 h-12 rounded-xl bg-white/10 text-white grid place-items-center">
@@ -55,9 +75,7 @@ tailwind.config = {
       </div>
       <i data-lucide="arrow-right" class="w-5 h-5 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition"></i>
     </a>
-
     <div id="sel-links" class="space-y-2"></div>
-
     <p class="text-center text-xs text-slate-400 mt-8">
       Los colaboradores, tesorero y despachadores acceden con el enlace único que el superadmin les comparte.
     </p>
@@ -78,6 +96,9 @@ tailwind.config = {
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <button id="btn-refresh" title="Actualizar datos" class="w-9 h-9 grid place-items-center rounded-lg text-slate-500 hover:bg-slate-100 transition">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
         <span id="role-badge" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"></span>
         <button id="btn-new" class="hidden inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-sm font-semibold px-3.5 py-2 rounded-xl shadow-sm transition">
           <i data-lucide="plus" class="w-4 h-4"></i><span class="hidden sm:inline">Nueva venta</span>
@@ -85,7 +106,6 @@ tailwind.config = {
       </div>
     </div>
   </header>
-
   <main class="max-w-6xl mx-auto px-4 py-6 space-y-5">
     <section id="progress-card" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 fade-in"></section>
     <section id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"></section>
@@ -104,6 +124,12 @@ tailwind.config = {
 
 <script>
 /* ═══════════════════════════════════════════════════════
+   CONFIG
+   ═══════════════════════════════════════════════════════ */
+const API = '/api/ventas';
+const CONFIG_KEY = 'sopa_config_v3';
+
+/* ═══════════════════════════════════════════════════════
    UTILIDADES
    ═══════════════════════════════════════════════════════ */
 const $  = s => document.querySelector(s);
@@ -113,9 +139,15 @@ const uid = () => 'v_' + Date.now().toString(36) + Math.random().toString(36).sl
 const icons = () => { if (window.lucide) window.lucide.createIcons(); };
 const IN = 'w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none bg-white';
 const LBL = 'block text-xs font-bold text-slate-500 mb-1.5';
-
-/* Renderiza un valor o placeholder en gris si está vacío */
 const val = (v, fb = '—') => v && String(v).trim() ? esc(v) : `<span class="missing">${fb}</span>`;
+
+function inlineCell(id, field, value, opts = {}) {
+  const { type='text', extra='', ph='', min='', max='', step='' } = opts;
+  return `<input data-inline data-id="${id}" data-field="${field}" type="${type}"
+    value="${esc(value ?? '')}" placeholder="${esc(ph)}"
+    ${min!=='' ? `min="${min}"` : ''} ${max!=='' ? `max="${max}"` : ''} ${step!=='' ? `step="${step}"` : ''}
+    class="inline-edit ${extra}">`;
+}
 
 function toast(msg, type='ok') {
   const cfg = { ok:{bg:'bg-slate-900', i:'check-circle', c:'text-emerald-400'},
@@ -129,31 +161,83 @@ function toast(msg, type='ok') {
 }
 
 /* ═══════════════════════════════════════════════════════
-   DATOS · una sola fuente de verdad
+   DATOS · config local + ventas desde API
    ═══════════════════════════════════════════════════════ */
-const KEY = 'sopa_solidaria_v2';
-const seed = () => ({
-  config: { titulo:'Sopas Solidarias', beneficiario:'Ayuda para un enfermo', meta:120, precio:5, moneda:'$' },
-  colaboradores: [], tesoreroEmail: '', despachadores: [], ventas: []
-});
+const defaultConfig = { titulo:'Sopas Solidarias', beneficiario:'Ayuda para un enfermo', meta:120, precio:5, moneda:'$' };
+const defaultEquipo = { colaboradores: [], tesoreroEmail: '', despachadores: [] };
 
-let data = cargar();
-function cargar() {
+let data = {
+  config: { ...defaultConfig },
+  colaboradores: [],
+  tesoreroEmail: '',
+  despachadores: [],
+  ventas: []
+};
+
+function cargarConfigLocal() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return seed();
-    const p = JSON.parse(raw), base = seed();
-    return {
-      config: { ...base.config, ...(p.config || {}) },
-      colaboradores: Array.isArray(p.colaboradores) ? p.colaboradores : [],
-      tesoreroEmail: typeof p.tesoreroEmail === 'string' ? p.tesoreroEmail : '',
-      despachadores: Array.isArray(p.despachadores) ? p.despachadores : [],
-      ventas: Array.isArray(p.ventas) ? p.ventas : []
-    };
-  } catch { return seed(); }
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    data.config = { ...defaultConfig, ...(p.config || {}) };
+    data.colaboradores = Array.isArray(p.colaboradores) ? p.colaboradores : [];
+    data.tesoreroEmail = typeof p.tesoreroEmail === 'string' ? p.tesoreroEmail : '';
+    data.despachadores = Array.isArray(p.despachadores) ? p.despachadores : [];
+  } catch {}
 }
-function guardar() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch { toast('No se pudo guardar', 'error'); } }
+function guardarConfigLocal() {
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({
+      config: data.config,
+      colaboradores: data.colaboradores,
+      tesoreroEmail: data.tesoreroEmail,
+      despachadores: data.despachadores
+    }));
+  } catch {}
+}
 
+async function cargarVentasDesdeAPI() {
+  try {
+    const res = await fetch(API, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Error ' + res.status);
+    const ventas = await res.json();
+    data.ventas = ventas.map(v => ({
+      ...v,
+      cantidad: Number(v.cantidad) || 0,
+      montoPagado: Number(v.montoPagado) || 0,
+      conciliado: !!v.conciliado,
+      entregado: !!v.entregado
+    }));
+  } catch (e) {
+    toast('No se pudo cargar desde el servidor', 'error');
+    console.error(e);
+  }
+}
+
+/* Guarda una venta en el servidor. Si venta==null, no hace nada remoto. */
+async function guardarVenta(venta) {
+  if (!venta) return;
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(venta)
+    });
+    if (!res.ok) throw new Error('Error ' + res.status);
+  } catch (e) {
+    toast('Error al guardar en servidor: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+async function borrarVentaAPI(id) {
+  try {
+    await fetch(API + '/' + id, { method: 'DELETE' });
+  } catch (e) {
+    toast('Error al eliminar en servidor', 'error');
+  }
+}
+
+/* Derivados */
 const precio = () => Number(data.config.precio) || 0;
 const money = n => `${data.config.moneda}${Number(n).toLocaleString('es-CO',{minimumFractionDigits:0,maximumFractionDigits:2})}`;
 const fmt = iso => new Date(iso).toLocaleString('es-CO', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
@@ -162,6 +246,11 @@ const totalSopas = () => data.ventas.reduce((s,v) => s + Number(v.cantidad||0), 
 const totalRecaudado = () => data.ventas.reduce((s,v) => s + Number(v.montoPagado||0), 0);
 const totalConciliado = () => data.ventas.filter(v => v.conciliado).reduce((s,v) => s + Number(v.montoPagado||0), 0);
 const totalEntregado = () => data.ventas.filter(v => v.entregado).reduce((s,v) => s + Number(v.cantidad||0), 0);
+const estaIncompleta = v => !v.cliente || !v.telefono || !v.ubicacion || !v.referencia || !v.montoPagado;
+const badgeIncompleta = v => estaIncompleta(v) ? `
+  <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+    <i data-lucide="alert-triangle" class="w-3 h-3"></i> Incompleta
+  </span>` : '';
 
 /* ═══════════════════════════════════════════════════════
    ACCESO POR URL
@@ -171,17 +260,20 @@ const rolParam = (qs.get('rol') || '').toLowerCase();
 const emailParam = (qs.get('email') || '').trim().toLowerCase();
 
 let user = null;
-if (rolParam === 'admin') {
-  user = { rol:'admin', nombre:'Superadmin', email:'' };
-} else if (rolParam === 'colaborador' && emailParam) {
-  const c = data.colaboradores.find(x => x.email.toLowerCase() === emailParam);
-  if (c) user = { rol:'colaborador', nombre:c.nombre, email:c.email };
-} else if (rolParam === 'tesorero' && emailParam) {
-  if (data.tesoreroEmail && data.tesoreroEmail.toLowerCase() === emailParam)
-    user = { rol:'tesorero', nombre:'Tesorero', email:data.tesoreroEmail };
-} else if (rolParam === 'despachador' && emailParam) {
-  const d = data.despachadores.find(x => x.email.toLowerCase() === emailParam);
-  if (d) user = { rol:'despachador', nombre:d.nombre, email:d.email };
+function determinarUsuario() {
+  user = null;
+  if (rolParam === 'admin') {
+    user = { rol:'admin', nombre:'Superadmin', email:'' };
+  } else if (rolParam === 'colaborador' && emailParam) {
+    const c = data.colaboradores.find(x => x.email.toLowerCase() === emailParam);
+    if (c) user = { rol:'colaborador', nombre:c.nombre, email:c.email };
+  } else if (rolParam === 'tesorero' && emailParam) {
+    if (data.tesoreroEmail && data.tesoreroEmail.toLowerCase() === emailParam)
+      user = { rol:'tesorero', nombre:'Tesorero', email:data.tesoreroEmail };
+  } else if (rolParam === 'despachador' && emailParam) {
+    const d = data.despachadores.find(x => x.email.toLowerCase() === emailParam);
+    if (d) user = { rol:'despachador', nombre:d.nombre, email:d.email };
+  }
 }
 
 let activeTab = null;
@@ -248,13 +340,11 @@ const TABS = {
 };
 
 function render() {
-  if (!activeTab) activeTab = TABS[user.rol][0].id;
-  renderHeader();
-  renderProgress();
-  renderStats();
-  renderTabs();
-  renderPanel();
-  icons();
+  if (!user) return;
+  if (!activeTab || !TABS[user.rol].some(t => t.id === activeTab)) {
+    activeTab = TABS[user.rol][0].id;
+  }
+  renderHeader(); renderProgress(); renderStats(); renderTabs(); renderPanel(); icons();
 }
 
 function renderHeader() {
@@ -271,7 +361,6 @@ function renderHeader() {
   }[user.rol];
   b.className = `hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${map.cls}`;
   b.innerHTML = `<i data-lucide="${map.i}" class="w-3.5 h-3.5"></i> ${esc(map.txt)}`;
-
   $('#btn-new').classList.toggle('hidden', user.rol !== 'colaborador');
 }
 
@@ -280,7 +369,6 @@ function renderProgress() {
   const vendidas = totalSopas();
   const pct = meta > 0 ? Math.min(100, Math.round((vendidas/meta)*100)) : 0;
   const libres = Math.max(0, meta - vendidas);
-
   $('#progress-card').innerHTML = `
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
@@ -330,7 +418,6 @@ function renderStats() {
       { label:'Total entregadas', value:ent.length,          icon:'truck',        color:'text-slate-600',  bg:'bg-slate-100' }
     ];
   }
-
   $('#stats').innerHTML = cards.map(c => `
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
       <div class="w-9 h-9 rounded-lg ${c.bg} ${c.color} grid place-items-center mb-3">
@@ -362,31 +449,20 @@ function renderPanel() {
     else if (activeTab === 'equipo') p.innerHTML = panelEquipo();
     else if (activeTab === 'campaña') p.innerHTML = panelCampaña();
     else if (activeTab === 'respaldo') p.innerHTML = panelRespaldo();
-  } else if (user.rol === 'colaborador') {
-    p.innerHTML = panelColaborador();
-  } else if (user.rol === 'tesorero') {
-    p.innerHTML = panelTesorero();
-  } else if (user.rol === 'despachador') {
-    p.innerHTML = panelDespachador();
-  }
-  bindPanel(); icons();
+  } else if (user.rol === 'colaborador') p.innerHTML = panelColaborador();
+  else if (user.rol === 'tesorero')     p.innerHTML = panelTesorero();
+  else if (user.rol === 'despachador')  p.innerHTML = panelDespachador();
+  icons();
 }
 
-/* ═══════════════════════════════════════════════════════
-   Helper: ¿está incompleta la venta?
-   ═══════════════════════════════════════════════════════ */
-function estaIncompleta(v) {
-  return !v.cliente || !v.telefono || !v.ubicacion || !v.referencia || !v.montoPagado;
-}
-function badgeIncompleta(v) {
-  return estaIncompleta(v) ? `
-    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-      <i data-lucide="alert-triangle" class="w-3 h-3"></i> Incompleta
-    </span>` : '';
-}
+const hintBanner = `
+  <div class="flex items-center gap-2 px-4 py-2.5 bg-brand-50/60 border-b border-brand-100 text-xs text-brand-800">
+    <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i>
+    <span>Toca cualquier celda para editarla. Se guarda automáticamente en el servidor al salir.</span>
+  </div>`;
 
 /* ═══════════════════════════════════════════════════════
-   PANEL ADMIN · VENTAS
+   ADMIN · VENTAS
    ═══════════════════════════════════════════════════════ */
 function panelAdminVentas() {
   let list = ventasOrd();
@@ -403,12 +479,11 @@ function panelAdminVentas() {
   if (filtros.entregado === 'si')  list = list.filter(v => v.entregado);
   if (filtros.entregado === 'no')  list = list.filter(v => !v.entregado);
   if (filtros.colaborador)         list = list.filter(v => v.colaboradorEmail === filtros.colaborador);
-  if (filtros.incompletos)         list = list.filter(v => estaIncompleta(v));
+  if (filtros.incompletos)         list = list.filter(estaIncompleta);
 
   const optCol = ['<option value="">Todos los colaboradores</option>']
     .concat(data.colaboradores.map(c => `<option value="${esc(c.email)}" ${filtros.colaborador===c.email?'selected':''}>${esc(c.nombre)}</option>`))
     .join('');
-
   const totalIncompletas = data.ventas.filter(estaIncompleta).length;
 
   return `
@@ -435,13 +510,12 @@ function panelAdminVentas() {
           <i data-lucide="alert-triangle" class="w-4 h-4"></i> Incompletas ${totalIncompletas ? `<span class="bg-amber-500 text-white text-[10px] px-1.5 rounded-full">${totalIncompletas}</span>` : ''}
         </button>
       </div>
-
+      ${hintBanner}
       <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs text-slate-500">
         <b class="text-slate-800">${list.length}</b> registro(s) ·
         <b class="text-slate-800">${list.reduce((s,v)=>s+Number(v.cantidad||0),0)}</b> sopa(s) ·
         Total <b class="text-slate-800">${money(list.reduce((s,v)=>s+Number(v.montoPagado||0),0))}</b>
       </div>
-
       ${list.length === 0 ? vacio('Sin ventas', 'Ajusta filtros o espera registros de colaboradores.') : `
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -459,7 +533,7 @@ function panelAdminVentas() {
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            ${list.map(v => filaAdmin(v)).join('')}
+            ${list.map(filaAdmin).join('')}
           </tbody>
         </table>
       </div>`}
@@ -468,20 +542,29 @@ function panelAdminVentas() {
 
 function filaAdmin(v) {
   return `
-    <tr class="hover:bg-slate-50/70">
-      <td class="px-3 py-3">
-        <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
-        <p class="text-[11px] text-slate-400">${val(v.telefono,'')}</p>
-        <div class="mt-1">${badgeIncompleta(v)}</div>
+    <tr data-row="${v.id}" class="hover:bg-slate-50/70">
+      <td class="px-2 py-2 align-top min-w-[160px]">
+        ${inlineCell(v.id,'cliente',v.cliente,{ extra:'font-semibold', ph:'Cliente' })}
+        ${inlineCell(v.id,'telefono',v.telefono,{ extra:'text-[11px] text-slate-500', ph:'Teléfono' })}
+        <div data-badge class="px-1 mt-1">${badgeIncompleta(v)}</div>
       </td>
-      <td class="px-3 py-3 text-slate-600 text-xs">
-        ${val(v.ubicacion,'Sin ubicación')}<br>
-        ${v.piso ? 'Piso '+esc(v.piso) : ''}${v.departamento ? ' · Depto '+esc(v.departamento) : ''}
+      <td class="px-2 py-2 align-top min-w-[140px]">
+        ${inlineCell(v.id,'ubicacion',v.ubicacion,{ extra:'text-xs', ph:'Ubicación' })}
+        <div class="flex gap-1">
+          ${inlineCell(v.id,'piso',v.piso,{ extra:'text-xs', ph:'Piso' })}
+          ${inlineCell(v.id,'departamento',v.departamento,{ extra:'text-xs', ph:'Depto' })}
+        </div>
       </td>
-      <td class="px-3 py-3 text-slate-600 text-xs">${val(v.colaborador)}</td>
-      <td class="px-3 py-3 text-center font-bold">${v.cantidad||0}</td>
-      <td class="px-3 py-3 text-right font-bold">${v.montoPagado ? money(v.montoPagado) : '<span class="missing">sin monto</span>'}</td>
-      <td class="px-3 py-3 text-xs text-slate-600 font-mono">${val(v.referencia,'—')}</td>
+      <td class="px-3 py-3 text-xs text-slate-600">${val(v.colaborador)}</td>
+      <td class="px-2 py-2 align-top" style="min-width:70px">
+        ${inlineCell(v.id,'cantidad',v.cantidad,{ type:'number', min:1, extra:'text-center font-bold' })}
+      </td>
+      <td class="px-2 py-2 align-top" style="min-width:90px">
+        ${inlineCell(v.id,'montoPagado',v.montoPagado,{ type:'number', min:0, step:'0.01', extra:'text-right font-bold', ph:'0' })}
+      </td>
+      <td class="px-2 py-2 align-top" style="min-width:110px">
+        ${inlineCell(v.id,'referencia',v.referencia,{ extra:'font-mono text-xs', ph:'Referencia' })}
+      </td>
       <td class="px-3 py-3">
         <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
           ${v.conciliado ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">
@@ -496,11 +579,7 @@ function filaAdmin(v) {
           ${v.entregado ? 'Sí' : 'No'}
         </span>
       </td>
-      <td class="px-3 py-3 text-right">
-        <button data-action="edit" data-id="${v.id}" title="Editar"
-          class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
-          <i data-lucide="pencil" class="w-4 h-4"></i>
-        </button>
+      <td class="px-3 py-3 text-right whitespace-nowrap">
         <button data-action="del" data-id="${v.id}" title="Eliminar"
           class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
           <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -510,7 +589,7 @@ function filaAdmin(v) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PANEL ADMIN · EQUIPO
+   ADMIN · EQUIPO
    ═══════════════════════════════════════════════════════ */
 function panelEquipo() {
   const base = location.origin === 'null' ? location.href.split('?')[0] : location.origin + location.pathname;
@@ -525,6 +604,10 @@ function panelEquipo() {
     : `<div class="p-4 text-sm text-slate-500 italic">Sin tesorero asignado.</div>`;
 
   return `
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 mb-4 flex items-start gap-2">
+      <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+      <span>La configuración de correos se guarda en <b>este navegador</b>. Si cambias de equipo o limpias los datos, deberás volver a configurarlo. Se recomienda hacerlo desde el mismo navegador.</span>
+    </div>
     <div class="grid lg:grid-cols-3 gap-5">
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="p-4 border-b border-slate-100">
@@ -541,7 +624,7 @@ function panelEquipo() {
         <form data-add="colaborador" class="p-4 border-b border-slate-100 space-y-2">
           <input name="nombre" placeholder="Nombre" required maxlength="40" class="${IN}">
           <input name="email" type="email" placeholder="correo@ejemplo.com" required class="${IN}">
-          <button class="w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition active:scale-[.98]">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
             <i data-lucide="user-plus" class="w-4 h-4"></i> Agregar colaborador
           </button>
         </form>
@@ -562,7 +645,7 @@ function panelEquipo() {
         </div>
         <form data-add="tesorero" class="p-4 border-b border-slate-100 space-y-2">
           <input name="email" type="email" value="${esc(data.tesoreroEmail)}" placeholder="tesorero@ejemplo.com" required class="${IN}">
-          <button class="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition active:scale-[.98]">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
             <i data-lucide="save" class="w-4 h-4"></i> Guardar tesorero
           </button>
         </form>
@@ -584,7 +667,7 @@ function panelEquipo() {
         <form data-add="despachador" class="p-4 border-b border-slate-100 space-y-2">
           <input name="nombre" placeholder="Nombre" required maxlength="40" class="${IN}">
           <input name="email" type="email" placeholder="correo@ejemplo.com" required class="${IN}">
-          <button class="w-full inline-flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition active:scale-[.98]">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
             <i data-lucide="plus" class="w-4 h-4"></i> Agregar despachador
           </button>
         </form>
@@ -616,7 +699,7 @@ function personaRow(tipo, persona, link, icon) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PANEL ADMIN · CAMPAÑA
+   ADMIN · CAMPAÑA
    ═══════════════════════════════════════════════════════ */
 function panelCampaña() {
   const c = data.config;
@@ -625,29 +708,14 @@ function panelCampaña() {
       <h3 class="font-bold text-slate-900">Configuración de la campaña</h3>
       <p class="text-xs text-slate-500 mt-0.5 mb-4">Estos valores alimentan todos los cálculos.</p>
       <form id="form-config" class="space-y-3">
-        <div>
-          <label class="${LBL}">Título</label>
-          <input name="titulo" value="${esc(c.titulo)}" class="${IN}">
-        </div>
-        <div>
-          <label class="${LBL}">Beneficiario / causa</label>
-          <input name="beneficiario" value="${esc(c.beneficiario)}" class="${IN}">
-        </div>
+        <div><label class="${LBL}">Título</label><input name="titulo" value="${esc(c.titulo)}" class="${IN}"></div>
+        <div><label class="${LBL}">Beneficiario / causa</label><input name="beneficiario" value="${esc(c.beneficiario)}" class="${IN}"></div>
         <div class="grid grid-cols-3 gap-3">
-          <div>
-            <label class="${LBL}">Meta sopas</label>
-            <input name="meta" type="number" min="1" value="${esc(c.meta)}" class="${IN}">
-          </div>
-          <div>
-            <label class="${LBL}">Precio</label>
-            <input name="precio" type="number" min="0" step="0.01" value="${esc(c.precio)}" class="${IN}">
-          </div>
-          <div>
-            <label class="${LBL}">Moneda</label>
-            <input name="moneda" maxlength="4" value="${esc(c.moneda)}" class="${IN}">
-          </div>
+          <div><label class="${LBL}">Meta sopas</label><input name="meta" type="number" min="1" value="${esc(c.meta)}" class="${IN}"></div>
+          <div><label class="${LBL}">Precio</label><input name="precio" type="number" min="0" step="0.01" value="${esc(c.precio)}" class="${IN}"></div>
+          <div><label class="${LBL}">Moneda</label><input name="moneda" maxlength="4" value="${esc(c.moneda)}" class="${IN}"></div>
         </div>
-        <button class="w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition active:scale-[.98]">
+        <button class="w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition">
           <i data-lucide="save" class="w-4 h-4"></i> Guardar configuración
         </button>
       </form>
@@ -655,7 +723,7 @@ function panelCampaña() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PANEL ADMIN · RESPALDO
+   ADMIN · RESPALDO
    ═══════════════════════════════════════════════════════ */
 function panelRespaldo() {
   return `
@@ -671,44 +739,35 @@ function panelRespaldo() {
             <i data-lucide="download" class="w-4 h-4"></i> JSON
           </button>
         </div>
-        <label class="mt-3 flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-brand-300 hover:bg-brand-50/40 text-slate-500 text-sm font-semibold px-3 py-3 rounded-xl cursor-pointer transition">
-          <i data-lucide="upload" class="w-4 h-4"></i> Importar respaldo JSON
-          <input id="file-import" type="file" accept=".json" class="hidden">
-        </label>
       </div>
-
       <div class="bg-white rounded-2xl border border-rose-200 shadow-sm p-5">
         <h3 class="font-bold text-rose-700">Zona de riesgo</h3>
-        <p class="text-xs text-slate-500 mt-0.5 mb-4">Acciones irreversibles.</p>
-        <div class="grid grid-cols-2 gap-3">
-          <button id="btn-clear-sales" class="inline-flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-semibold px-3 py-2.5 rounded-xl border border-rose-200 transition">
-            <i data-lucide="eraser" class="w-4 h-4"></i> Borrar ventas
-          </button>
-          <button id="btn-reset" class="inline-flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-3 py-2.5 rounded-xl transition">
-            <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reiniciar todo
-          </button>
-        </div>
+        <p class="text-xs text-slate-500 mt-0.5 mb-4">Acciones irreversibles sobre la base de datos.</p>
+        <button id="btn-clear-sales" class="w-full inline-flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-semibold px-3 py-2.5 rounded-xl border border-rose-200 transition">
+          <i data-lucide="eraser" class="w-4 h-4"></i> Borrar todas las ventas del servidor
+        </button>
       </div>
     </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════
-   PANEL COLABORADOR
+   COLABORADOR
    ═══════════════════════════════════════════════════════ */
 function panelColaborador() {
   const mias = ventasOrd().filter(v => v.colaboradorEmail === user.email);
   return `
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
         <div>
           <h3 class="font-bold text-slate-900">Mis ventas registradas</h3>
-          <p class="text-xs text-slate-500 mt-0.5">${mias.length} registro(s) · puedes editar cuando quieras</p>
+          <p class="text-xs text-slate-500 mt-0.5">${mias.length} registro(s) · puedes editar directamente en la tabla</p>
         </div>
         <button id="btn-new-inline" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition">
           <i data-lucide="plus" class="w-4 h-4"></i> Nueva venta
         </button>
       </div>
-      ${mias.length === 0 ? vacio('Aún no has registrado ventas', 'Puedes empezar con solo la cantidad y completar después.') : `
+      ${hintBanner}
+      ${mias.length === 0 ? vacio('Aún no has registrado ventas', 'Usa «Nueva venta» para empezar.') : `
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -725,19 +784,28 @@ function panelColaborador() {
           </thead>
           <tbody class="divide-y divide-slate-100">
             ${mias.map(v => `
-              <tr class="hover:bg-slate-50/70">
-                <td class="px-3 py-3">
-                  <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
-                  <p class="text-[11px] text-slate-400">${val(v.telefono,'')}</p>
-                  <div class="mt-1">${badgeIncompleta(v)}</div>
+              <tr data-row="${v.id}" class="hover:bg-slate-50/70">
+                <td class="px-2 py-2 align-top min-w-[160px]">
+                  ${inlineCell(v.id,'cliente',v.cliente,{extra:'font-semibold',ph:'Cliente'})}
+                  ${inlineCell(v.id,'telefono',v.telefono,{extra:'text-[11px] text-slate-500',ph:'Teléfono'})}
+                  <div data-badge class="px-1 mt-1">${badgeIncompleta(v)}</div>
                 </td>
-                <td class="px-3 py-3 text-xs text-slate-600">
-                  ${val(v.ubicacion,'Sin ubicación')}<br>
-                  ${v.piso?'Piso '+esc(v.piso):''}${v.departamento?' · Depto '+esc(v.departamento):''}
+                <td class="px-2 py-2 align-top min-w-[140px]">
+                  ${inlineCell(v.id,'ubicacion',v.ubicacion,{extra:'text-xs',ph:'Ubicación'})}
+                  <div class="flex gap-1">
+                    ${inlineCell(v.id,'piso',v.piso,{extra:'text-xs',ph:'Piso'})}
+                    ${inlineCell(v.id,'departamento',v.departamento,{extra:'text-xs',ph:'Depto'})}
+                  </div>
                 </td>
-                <td class="px-3 py-3 text-center font-bold">${v.cantidad||0}</td>
-                <td class="px-3 py-3 text-right font-bold">${v.montoPagado ? money(v.montoPagado) : '<span class="missing">sin monto</span>'}</td>
-                <td class="px-3 py-3 text-xs font-mono text-slate-600">${val(v.referencia,'—')}</td>
+                <td class="px-2 py-2 align-top" style="min-width:70px">
+                  ${inlineCell(v.id,'cantidad',v.cantidad,{type:'number',min:1,extra:'text-center font-bold'})}
+                </td>
+                <td class="px-2 py-2 align-top" style="min-width:90px">
+                  ${inlineCell(v.id,'montoPagado',v.montoPagado,{type:'number',min:0,step:'0.01',extra:'text-right font-bold',ph:'0'})}
+                </td>
+                <td class="px-2 py-2 align-top" style="min-width:110px">
+                  ${inlineCell(v.id,'referencia',v.referencia,{extra:'font-mono text-xs',ph:'Referencia'})}
+                </td>
                 <td class="px-3 py-3">
                   <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
                     ${v.conciliado?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">
@@ -751,10 +819,6 @@ function panelColaborador() {
                   </span>
                 </td>
                 <td class="px-3 py-3 text-right whitespace-nowrap">
-                  <button data-action="edit" data-id="${v.id}" title="Editar"
-                    class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
-                    <i data-lucide="pencil" class="w-4 h-4"></i>
-                  </button>
                   <button data-action="del" data-id="${v.id}" title="Eliminar"
                     class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -768,7 +832,7 @@ function panelColaborador() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PANEL TESORERO · CONCILIACIÓN
+   TESORERO
    ═══════════════════════════════════════════════════════ */
 function panelTesorero() {
   let list = ventasOrd();
@@ -778,8 +842,7 @@ function panelTesorero() {
   }
   if (filtros.conciliado === 'si') list = list.filter(v => v.conciliado);
   if (filtros.conciliado === 'no') list = list.filter(v => !v.conciliado);
-  if (filtros.incompletos)         list = list.filter(v => estaIncompleta(v));
-
+  if (filtros.incompletos)         list = list.filter(estaIncompleta);
   const totalIncompletas = data.ventas.filter(estaIncompleta).length;
 
   return `
@@ -803,7 +866,7 @@ function panelTesorero() {
           <i data-lucide="sheet" class="w-4 h-4"></i> Excel
         </button>
       </div>
-
+      ${hintBanner}
       ${list.length === 0 ? vacio('Sin registros', 'No hay ventas que conciliar.') : `
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -821,29 +884,33 @@ function panelTesorero() {
           </thead>
           <tbody class="divide-y divide-slate-100">
             ${list.map(v => `
-              <tr class="hover:bg-slate-50/70 ${estaIncompleta(v) ? 'bg-amber-50/40' : ''}">
+              <tr data-row="${v.id}" class="hover:bg-slate-50/70 ${estaIncompleta(v) ? 'bg-amber-50/40' : ''}">
                 <td class="px-3 py-3 text-center">
                   <input type="checkbox" data-conc="${v.id}" ${v.conciliado?'checked':''}
                     class="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer">
                 </td>
                 <td class="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">${fmt(v.fecha)}</td>
                 <td class="px-3 py-3 text-xs text-slate-600">${val(v.colaborador)}</td>
-                <td class="px-3 py-3">
-                  <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
-                  <p class="text-[11px] text-slate-400">${v.cantidad||0} sopa(s)</p>
-                  <div class="mt-1">${badgeIncompleta(v)}</div>
+                <td class="px-2 py-2 align-top min-w-[150px]">
+                  ${inlineCell(v.id,'cliente',v.cliente,{extra:'font-semibold',ph:'Cliente'})}
+                  <div class="px-2 text-[11px] text-slate-400">${v.cantidad||0} sopa(s)</div>
+                  <div data-badge class="px-1 mt-1">${badgeIncompleta(v)}</div>
                 </td>
-                <td class="px-3 py-3 font-mono text-xs text-slate-700">${val(v.referencia,'—')}</td>
-                <td class="px-3 py-3 text-right font-bold text-slate-800">${v.montoPagado ? money(v.montoPagado) : '<span class="missing">sin monto</span>'}</td>
+                <td class="px-2 py-2 align-top" style="min-width:120px">
+                  ${inlineCell(v.id,'referencia',v.referencia,{extra:'font-mono text-xs',ph:'Referencia'})}
+                </td>
+                <td class="px-2 py-2 align-top" style="min-width:90px">
+                  ${inlineCell(v.id,'montoPagado',v.montoPagado,{type:'number',min:0,step:'0.01',extra:'text-right font-bold',ph:'0'})}
+                </td>
                 <td class="px-3 py-3">
                   <input type="text" data-nota="${v.id}" value="${esc(v.notaConciliacion||'')}"
                     placeholder="Agregar nota..."
                     class="w-full min-w-[150px] px-2 py-1 text-xs rounded-lg border border-slate-200 focus:border-brand-400 outline-none">
                 </td>
                 <td class="px-3 py-3 text-right">
-                  <button data-action="edit" data-id="${v.id}" title="Editar"
-                    class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50">
-                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  <button data-action="del" data-id="${v.id}" title="Eliminar"
+                    class="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </td>
               </tr>`).join('')}
@@ -854,7 +921,7 @@ function panelTesorero() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PANEL DESPACHADOR · MOBILE
+   DESPACHADOR
    ═══════════════════════════════════════════════════════ */
 function panelDespachador() {
   const list = ventasOrd().filter(v => v.conciliado);
@@ -869,12 +936,10 @@ function panelDespachador() {
           <p class="text-xs text-slate-500">${pendientes.length} pendiente(s) · ${entregadas.length} entregada(s)</p>
         </div>
       </div>
-
       ${pendientes.length === 0 ? vacio('Sin entregas pendientes', 'Cuando el tesorero concilie pagos, aparecerán aquí.') : `
       <div class="grid sm:grid-cols-2 gap-3">
         ${pendientes.map(v => cardEntrega(v)).join('')}
       </div>`}
-
       ${entregadas.length > 0 ? `
         <div class="pt-4">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Entregadas recientemente</h3>
@@ -897,7 +962,6 @@ function cardEntrega(v, done = false) {
           <i data-lucide="soup" class="w-3 h-3"></i>${v.cantidad||0}
         </span>
       </div>
-
       <div class="mt-3 space-y-1.5 text-sm">
         <div class="flex items-start gap-2 ${v.ubicacion ? 'text-slate-700' : 'missing'}">
           <i data-lucide="map-pin" class="w-4 h-4 text-slate-400 shrink-0 mt-0.5"></i>
@@ -908,13 +972,10 @@ function cardEntrega(v, done = false) {
           <span>${esc(v.nota)}</span>
         </div>` : ''}
       </div>
-
       <div class="mt-3 flex items-center justify-between gap-2">
         <div class="text-[11px] ${v.referencia ? 'text-slate-400 font-mono' : 'missing'} truncate">Ref: ${v.referencia || '—'}</div>
-        ${done ? `
-          <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
-            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Entregado
-          </span>` : `
+        ${done ? `<span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Entregado</span>` : `
           <button data-ent="${v.id}"
             class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition">
             <i data-lucide="check" class="w-4 h-4"></i> Entregar
@@ -924,30 +985,22 @@ function cardEntrega(v, done = false) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   MODAL · NUEVA / EDITAR VENTA  ·  CAMPOS OPCIONALES
+   MODAL · NUEVA VENTA
    ═══════════════════════════════════════════════════════ */
-function openModal(id = null) {
-  const editando = id ? data.ventas.find(v => v.id === id) : null;
-  const yaVendidas = totalSopas() - (editando ? Number(editando.cantidad) : 0);
+function openModal() {
+  const yaVendidas = totalSopas();
   const disponibles = Math.max(0, Number(data.config.meta) - yaVendidas);
-  if (!editando && disponibles <= 0) return toast('No quedan sopas disponibles', 'error');
-
-  const v = editando || {
-    cliente:'', telefono:'', ubicacion:'', piso:'', departamento:'',
-    cantidad:1, referencia:'', montoPagado:'', metodo:'transferencia', nota:''
-  };
-
-  const optHelp = 'text-[10px] text-slate-400 mt-1 block';
+  if (disponibles <= 0) return toast('No quedan sopas disponibles', 'error');
 
   $('#modal-box').innerHTML = `
     <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden fade-in">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 grid place-items-center">
-            <i data-lucide="${editando?'pencil':'soup'}" class="w-5 h-5"></i>
+            <i data-lucide="soup" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-900 leading-tight">${editando?'Editar venta':'Registrar venta'}</h3>
+            <h3 class="font-bold text-slate-900 leading-tight">Registrar venta</h3>
             <p class="text-xs text-slate-500">${disponibles} sopa(s) disponibles · puedes completar después</p>
           </div>
         </div>
@@ -955,68 +1008,41 @@ function openModal(id = null) {
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-
       <form id="form-venta" class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
         <div class="grid sm:grid-cols-2 gap-4">
-          <div class="sm:col-span-2">
-            <label class="${LBL}">Nombre del cliente</label>
-            <input name="cliente" maxlength="60" value="${esc(v.cliente)}" placeholder="Opcional · completa cuando lo sepas" class="${IN}">
-          </div>
-          <div>
-            <label class="${LBL}">Teléfono</label>
-            <input name="telefono" maxlength="25" value="${esc(v.telefono)}" placeholder="Opcional" class="${IN}">
-          </div>
-          <div>
-            <label class="${LBL}">Ubicación / Sector</label>
-            <input name="ubicacion" maxlength="80" value="${esc(v.ubicacion)}" placeholder="Opcional" class="${IN}">
-          </div>
-          <div>
-            <label class="${LBL}">Piso</label>
-            <input name="piso" maxlength="10" value="${esc(v.piso)}" placeholder="Opcional" class="${IN}">
-          </div>
-          <div>
-            <label class="${LBL}">Departamento</label>
-            <input name="departamento" maxlength="10" value="${esc(v.departamento)}" placeholder="Opcional" class="${IN}">
-          </div>
-
+          <div class="sm:col-span-2"><label class="${LBL}">Nombre del cliente</label>
+            <input name="cliente" maxlength="60" placeholder="Opcional" class="${IN}"></div>
+          <div><label class="${LBL}">Teléfono</label>
+            <input name="telefono" maxlength="25" placeholder="Opcional" class="${IN}"></div>
+          <div><label class="${LBL}">Ubicación / Sector</label>
+            <input name="ubicacion" maxlength="80" placeholder="Opcional" class="${IN}"></div>
+          <div><label class="${LBL}">Piso</label>
+            <input name="piso" maxlength="10" placeholder="Opcional" class="${IN}"></div>
+          <div><label class="${LBL}">Departamento</label>
+            <input name="departamento" maxlength="10" placeholder="Opcional" class="${IN}"></div>
           <div class="sm:col-span-2 pt-2 border-t border-slate-100">
             <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Datos del pago</p>
           </div>
-
-          <div>
-            <label class="${LBL}">Cantidad de sopas *</label>
-            <input name="cantidad" id="in-cant" type="number" min="1" max="${disponibles}" value="${v.cantidad}" class="${IN} text-center font-bold">
-            <span class="${optHelp}">Lo único obligatorio. El resto puede quedar vacío.</span>
-          </div>
-          <div>
-            <label class="${LBL}">Método</label>
+          <div><label class="${LBL}">Cantidad de sopas *</label>
+            <input name="cantidad" id="in-cant" type="number" min="1" max="${disponibles}" value="1" class="${IN} text-center font-bold">
+            <span class="text-[10px] text-slate-400 mt-1 block">Lo único obligatorio.</span></div>
+          <div><label class="${LBL}">Método</label>
             <select name="metodo" class="${IN}">
-              <option value="transferencia" ${v.metodo==='transferencia'?'selected':''}>📱 Transferencia</option>
-              <option value="efectivo"      ${v.metodo==='efectivo'?'selected':''}>💵 Efectivo</option>
-              <option value="otro"          ${v.metodo==='otro'?'selected':''}>🔁 Otro</option>
-            </select>
-          </div>
-          <div>
-            <label class="${LBL}">N° referencia bancaria</label>
-            <input name="referencia" maxlength="40" value="${esc(v.referencia)}" placeholder="Opcional" class="${IN} font-mono">
-          </div>
-          <div>
-            <label class="${LBL}">Monto pagado</label>
-            <input name="montoPagado" id="in-monto" type="number" min="0" step="0.01" value="${esc(v.montoPagado)}" placeholder="Opcional" class="${IN}">
-          </div>
-          <div class="sm:col-span-2">
-            <label class="${LBL}">Nota</label>
-            <textarea name="nota" rows="2" maxlength="140" placeholder="Opcional" class="${IN} resize-none">${esc(v.nota||'')}</textarea>
-          </div>
+              <option value="transferencia">📱 Transferencia</option>
+              <option value="efectivo">💵 Efectivo</option>
+              <option value="otro">🔁 Otro</option>
+            </select></div>
+          <div><label class="${LBL}">N° referencia bancaria</label>
+            <input name="referencia" maxlength="40" placeholder="Opcional" class="${IN} font-mono"></div>
+          <div><label class="${LBL}">Monto pagado</label>
+            <input name="montoPagado" type="number" min="0" step="0.01" placeholder="Opcional" class="${IN}"></div>
+          <div class="sm:col-span-2"><label class="${LBL}">Nota</label>
+            <textarea name="nota" rows="2" maxlength="140" placeholder="Opcional" class="${IN} resize-none"></textarea></div>
         </div>
-
         <div class="flex gap-3 pt-1">
-          <button type="button" id="modal-cancel" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
-            Cancelar
-          </button>
-          <button type="submit" class="flex-1 inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition active:scale-[.98]">
-            <i data-lucide="${editando?'save':'check'}" class="w-4 h-4"></i>
-            ${editando?'Guardar cambios':'Registrar venta'}
+          <button type="button" id="modal-cancel" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button type="submit" class="flex-1 inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition">
+            <i data-lucide="check" class="w-4 h-4"></i> Registrar venta
           </button>
         </div>
       </form>
@@ -1036,23 +1062,23 @@ function openModal(id = null) {
   $('#modal').onclick = e => { if (e.target.id === 'modal') cerrar(); };
   const onEsc = e => { if (e.key === 'Escape') { cerrar(); document.removeEventListener('keydown', onEsc); } };
   document.addEventListener('keydown', onEsc);
-
   setTimeout(() => $('[name="cliente"]')?.focus(), 60);
 
-  $('#form-venta').addEventListener('submit', e => {
+  $('#form-venta').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const cantidad = Number(f.get('cantidad'));
     const montoRaw = String(f.get('montoPagado')||'').trim();
     const montoPagado = montoRaw === '' ? 0 : Number(montoRaw);
 
-    // Única validación: cantidad razonable
     if (!Number.isFinite(cantidad) || cantidad < 1) return toast('La cantidad debe ser al menos 1', 'error');
     if (cantidad > disponibles) return toast(`Solo quedan ${disponibles} sopa(s)`, 'error');
-    if (montoRaw !== '' && (!Number.isFinite(montoPagado) || montoPagado < 0))
-      return toast('Monto inválido', 'error');
 
-    const payload = {
+    const nuevaVenta = {
+      id: uid(),
+      fecha: new Date().toISOString(),
+      colaborador: user.nombre,
+      colaboradorEmail: user.email,
       cliente: String(f.get('cliente')||'').trim(),
       telefono: String(f.get('telefono')||'').trim(),
       ubicacion: String(f.get('ubicacion')||'').trim(),
@@ -1063,23 +1089,18 @@ function openModal(id = null) {
       referencia: String(f.get('referencia')||'').trim(),
       montoPagado,
       nota: String(f.get('nota')||'').trim(),
-      colaborador: user.nombre,
-      colaboradorEmail: user.email
+      conciliado: false, conciliadoPor: '', conciliadoFecha: '', notaConciliacion: '',
+      entregado: false, entregadoPor: '', entregadoFecha: ''
     };
 
-    if (editando) {
-      const idx = data.ventas.findIndex(x => x.id === editando.id);
-      data.ventas[idx] = { ...data.ventas[idx], ...payload };
-      toast('Venta actualizada');
-    } else {
-      data.ventas.push({
-        id: uid(), fecha: new Date().toISOString(), ...payload,
-        conciliado:false, conciliadoPor:null, conciliadoFecha:null, notaConciliacion:'',
-        entregado:false, entregadoPor:null, entregadoFecha:null
-      });
-      toast(`Venta registrada · ${cantidad} sopa(s)`);
-    }
-    guardar(); cerrar(); render();
+    // Guardar en servidor
+    await guardarVenta(nuevaVenta);
+
+    // Refrescar desde servidor
+    await cargarVentasDesdeAPI();
+    cerrar();
+    render();
+    toast(`Venta registrada · ${cantidad} sopa(s)`);
   });
 }
 
@@ -1127,12 +1148,81 @@ function exportarCSV() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   EVENTOS
+   ⭐ EDICIÓN EN LÍNEA → GUARDA EN API
    ═══════════════════════════════════════════════════════ */
-$('#panel').addEventListener('click', e => {
+$('#panel').addEventListener('change', async e => {
+  const inp = e.target.closest('[data-inline]');
+  if (!inp) return;
+  const id = inp.dataset.id, field = inp.dataset.field;
+  const v = data.ventas.find(x => x.id === id);
+  if (!v) return;
+
+  if (user.rol === 'colaborador' && v.colaboradorEmail !== user.email) {
+    toast('No puedes editar ventas de otro colaborador', 'error');
+    inp.value = v[field] || '';
+    return;
+  }
+
+  let value = inp.value;
+  if (field === 'cantidad') {
+    value = Number(value);
+    if (!Number.isFinite(value) || value < 1) {
+      toast('Cantidad inválida', 'error');
+      inp.value = v.cantidad;
+      return;
+    }
+    const otras = totalSopas() - Number(v.cantidad || 0);
+    const disp = Number(data.config.meta) - otras;
+    if (value > disp) {
+      toast(`Solo quedan ${disp} sopa(s) disponibles`, 'error');
+      inp.value = v.cantidad;
+      return;
+    }
+  } else if (field === 'montoPagado') {
+    if (String(value).trim() === '') {
+      value = 0;
+      inp.value = '';
+    } else {
+      value = Number(value);
+      if (!Number.isFinite(value) || value < 0) {
+        toast('Monto inválido', 'error');
+        inp.value = v.montoPagado || '';
+        return;
+      }
+    }
+  } else {
+    value = String(value || '').trim();
+  }
+
+  if (v[field] === value) return;
+  v[field] = value;
+  await guardarVenta(v);
+
+  const row = document.querySelector(`tr[data-row="${id}"]`);
+  if (row) {
+    const badge = row.querySelector('[data-badge]');
+    if (badge) badge.innerHTML = badgeIncompleta(v);
+  }
+  renderProgress(); renderStats(); icons();
+
+  inp.style.transition = 'background .5s';
+  inp.style.background = '#dcfce7';
+  setTimeout(() => { inp.style.background = ''; }, 600);
+});
+
+$('#panel').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.matches('[data-inline]')) {
+    e.preventDefault();
+    e.target.blur();
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   OTROS EVENTOS
+   ═══════════════════════════════════════════════════════ */
+$('#panel').addEventListener('click', async e => {
   const tb = e.target.closest('[data-tab]');
   if (tb) { activeTab = tb.dataset.tab; render(); return; }
-
   if (e.target.closest('#btn-new-inline')) { openModal(); return; }
 
   const cp = e.target.closest('[data-copy]');
@@ -1148,8 +1238,8 @@ $('#panel').addEventListener('click', e => {
     if (!confirm(`¿Eliminar este ${tipo}?`)) return;
     if (tipo === 'colaborador') data.colaboradores = data.colaboradores.filter(c => c.email !== email);
     if (tipo === 'despachador') data.despachadores = data.despachadores.filter(d => d.email !== email);
-    guardar(); render(); renderSelect();
-    toast('Eliminado');
+    guardarConfigLocal();
+    render(); renderSelect(); toast('Eliminado');
     return;
   }
 
@@ -1157,18 +1247,14 @@ $('#panel').addEventListener('click', e => {
   if (act) {
     const id = act.dataset.id, venta = data.ventas.find(v => v.id === id);
     if (!venta) return;
-    if (act.dataset.action === 'edit') {
-      // Colaborador solo edita las suyas
-      if (user.rol === 'colaborador' && venta.colaboradorEmail !== user.email)
-        return toast('No puedes editar ventas de otro colaborador', 'error');
-      openModal(id);
-    }
     if (act.dataset.action === 'del') {
       if (user.rol === 'colaborador' && venta.colaboradorEmail !== user.email)
         return toast('No puedes eliminar ventas de otro colaborador', 'error');
       if (!confirm(`¿Eliminar la venta de "${venta.cliente || 'Sin nombre'}"?`)) return;
+      await borrarVentaAPI(id);
       data.ventas = data.ventas.filter(v => v.id !== id);
-      guardar(); render(); toast('Venta eliminada');
+      render();
+      toast('Venta eliminada');
     }
     return;
   }
@@ -1180,43 +1266,72 @@ $('#panel').addEventListener('click', e => {
     v.entregado = true;
     v.entregadoPor = user.nombre;
     v.entregadoFecha = new Date().toISOString();
-    guardar(); render(); toast('Entrega registrada');
+    await guardarVenta(v);
+    render();
+    toast('Entrega registrada');
     return;
   }
 
-  // Filtro incompletas
   if (e.target.closest('#f-incomp')) {
     filtros.incompletos = !filtros.incompletos;
     renderPanel();
     return;
   }
+
+  if (e.target.closest('#btn-xls') || e.target.closest('#btn-xls-tes')) exportarCSV();
+  if (e.target.closest('#btn-json')) {
+    descargar(`sopas_respaldo_${fechaArchivo()}.json`, JSON.stringify(data, null, 2), 'application/json');
+    toast('Respaldo JSON descargado');
+  }
+  if (e.target.closest('#btn-clear-sales')) {
+    if (!data.ventas.length) return toast('No hay ventas', 'info');
+    if (!confirm(`¿Borrar TODAS las ${data.ventas.length} ventas del servidor? Irreversible.`)) return;
+    for (const v of [...data.ventas]) {
+      await borrarVentaAPI(v.id);
+    }
+    data.ventas = [];
+    render();
+    toast('Todas las ventas fueron eliminadas');
+  }
 });
 
-$('#panel').addEventListener('change', e => {
+/* Conciliación (checkbox) */
+$('#panel').addEventListener('change', async e => {
   const chk = e.target.closest('[data-conc]');
   if (chk) {
     const v = data.ventas.find(x => x.id === chk.dataset.conc);
     if (!v) return;
     v.conciliado = chk.checked;
-    v.conciliadoPor = chk.checked ? user.nombre : null;
-    v.conciliadoFecha = chk.checked ? new Date().toISOString() : null;
-    guardar(); render();
+    v.conciliadoPor = chk.checked ? user.nombre : '';
+    v.conciliadoFecha = chk.checked ? new Date().toISOString() : '';
+    await guardarVenta(v);
+    render();
     toast(chk.checked ? 'Marcada como conciliada' : 'Conciliación retirada', 'info');
   }
 });
 
+/* Notas de conciliación */
 let notaTimer;
 $('#panel').addEventListener('input', e => {
   const n = e.target.closest('[data-nota]');
   if (n) {
     clearTimeout(notaTimer);
-    notaTimer = setTimeout(() => {
+    notaTimer = setTimeout(async () => {
       const v = data.ventas.find(x => x.id === n.dataset.nota);
-      if (v) { v.notaConciliacion = n.value; guardar(); }
-    }, 500);
+      if (v) {
+        v.notaConciliacion = n.value;
+        await guardarVenta(v);
+      }
+    }, 800);
   }
-  const s = e.target.closest('#f-search');
-  if (s) { filtros.search = s.value; renderPanel(); $('#f-search')?.focus(); }
+  if (e.target.id === 'f-search') {
+    clearTimeout(window.__searchTimer);
+    window.__searchTimer = setTimeout(() => {
+      filtros.search = e.target.value;
+      renderPanel();
+      document.getElementById('f-search')?.focus();
+    }, 250);
+  }
 });
 
 $('#panel').addEventListener('change', e => {
@@ -1225,6 +1340,7 @@ $('#panel').addEventListener('change', e => {
   if (e.target.id === 'f-col')  { filtros.colaborador = e.target.value; renderPanel(); }
 });
 
+/* Formularios equipo / config */
 $('#panel').addEventListener('submit', e => {
   const addForm = e.target.closest('[data-add]');
   if (addForm) {
@@ -1238,13 +1354,17 @@ $('#panel').addEventListener('submit', e => {
       const lista = tipo === 'colaborador' ? data.colaboradores : data.despachadores;
       if (lista.some(x => x.email.toLowerCase() === email)) return toast('Ese correo ya existe', 'error');
       lista.push({ nombre, email });
-      guardar(); render(); renderSelect(); toast(`${tipo === 'colaborador' ? 'Colaborador' : 'Despachador'} agregado`);
+      guardarConfigLocal();
+      render(); renderSelect();
+      toast('Agregado');
     }
     if (tipo === 'tesorero') {
       const email = String(f.get('email')||'').trim().toLowerCase();
       if (!email) return toast('Ingresa un correo', 'error');
       data.tesoreroEmail = email;
-      guardar(); render(); renderSelect(); toast('Tesorero guardado');
+      guardarConfigLocal();
+      render(); renderSelect();
+      toast('Tesorero guardado');
     }
     return;
   }
@@ -1261,51 +1381,11 @@ $('#panel').addEventListener('submit', e => {
       precio: Math.max(0, Number(f.get('precio')) || 0),
       moneda: String(f.get('moneda')).trim() || '$'
     };
-    guardar(); render(); renderSelect(); toast('Configuración guardada');
+    guardarConfigLocal();
+    render(); renderSelect();
+    toast('Configuración guardada');
     return;
   }
-});
-
-$('#panel').addEventListener('click', e => {
-  if (e.target.closest('#btn-xls'))     exportarCSV();
-  if (e.target.closest('#btn-xls-tes')) exportarCSV();
-  if (e.target.closest('#btn-json')) {
-    descargar(`sopas_respaldo_${fechaArchivo()}.json`, JSON.stringify(data, null, 2), 'application/json');
-    toast('Respaldo JSON descargado');
-  }
-  if (e.target.closest('#btn-clear-sales')) {
-    if (!data.ventas.length) return toast('No hay ventas', 'info');
-    if (!confirm(`¿Borrar ${data.ventas.length} ventas? Irreversible.`)) return;
-    data.ventas = []; guardar(); render(); toast('Ventas eliminadas');
-  }
-  if (e.target.closest('#btn-reset')) {
-    if (!confirm('¿Reiniciar TODO el sistema? Se perderán ventas, equipo y configuración.')) return;
-    data = seed(); guardar(); render(); renderSelect(); toast('Sistema reiniciado');
-  }
-});
-
-$('#panel').addEventListener('change', e => {
-  if (e.target.id !== 'file-import') return;
-  const file = e.target.files[0]; if (!file) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    try {
-      const p = JSON.parse(ev.target.result);
-      if (!p || !Array.isArray(p.ventas)) throw new Error('Formato inválido');
-      if (!confirm('Esto reemplazará todos los datos. ¿Continuar?')) return;
-      const base = seed();
-      data = {
-        config: { ...base.config, ...(p.config||{}) },
-        colaboradores: Array.isArray(p.colaboradores) ? p.colaboradores : [],
-        tesoreroEmail: typeof p.tesoreroEmail === 'string' ? p.tesoreroEmail : '',
-        despachadores: Array.isArray(p.despachadores) ? p.despachadores : [],
-        ventas: p.ventas
-      };
-      guardar(); render(); renderSelect(); toast('Respaldo restaurado');
-    } catch (err) { toast('Archivo inválido: ' + err.message, 'error'); }
-  };
-  r.readAsText(file);
-  e.target.value = '';
 });
 
 $('#tabs').addEventListener('click', e => {
@@ -1315,20 +1395,43 @@ $('#tabs').addEventListener('click', e => {
 
 $('#btn-new').addEventListener('click', () => openModal());
 
+$('#btn-refresh').addEventListener('click', async () => {
+  const icon = $('#btn-refresh i');
+  icon?.classList.add('animate-spin');
+  await cargarVentasDesdeAPI();
+  render();
+  icon?.classList.remove('animate-spin');
+  toast('Datos actualizados');
+});
+
 /* ═══════════════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════════════ */
-(function init() {
+(async function init() {
   icons();
+  cargarConfigLocal();
+  await cargarVentasDesdeAPI();
+  determinarUsuario();
+
+  $('#loading-screen').style.display = 'none';
+
   if (!user) {
-    $('#screen-select').classList.remove('hidden');
-    $('#screen-app').classList.add('hidden');
+    const s = $('#screen-select');
+    s.classList.remove('hidden');
+    s.style.display = 'flex';
     renderSelect();
     return;
   }
+
   $('#screen-select').classList.add('hidden');
   $('#screen-app').classList.remove('hidden');
   render();
+
+  // Auto-refresh cada 30 segundos
+  setInterval(async () => {
+    await cargarVentasDesdeAPI();
+    render();
+  }, 30000);
 })();
 </script>
 </body>
