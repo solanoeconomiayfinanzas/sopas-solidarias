@@ -45,10 +45,6 @@ tailwind.config = {
   @keyframes spin{ to{ transform: rotate(360deg); } }
   .stat-card{ transition: all .15s ease; }
   .stat-card:hover{ transform: translateY(-2px); }
-  .move-right{ animation: moveRight .45s ease both; }
-  @keyframes moveRight{ 0%{ opacity:.3; transform:translateX(-20px);} 100%{ opacity:1; transform:none;} }
-  .move-left{ animation: moveLeft .45s ease both; }
-  @keyframes moveLeft{ 0%{ opacity:.3; transform:translateX(20px);} 100%{ opacity:1; transform:none;} }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen">
@@ -132,7 +128,7 @@ tailwind.config = {
 <script>
 /* ═══════════════════════════════════════════════════════ */
 const API = '/api/ventas';
-const CONFIG_KEY = 'sopa_config_v5';
+const CONFIG_KEY = 'sopa_config_v6';
 const BASE_UBICACIONES = ['EDIF. CORPORATIVO', 'PIM', 'PROYECTOS', 'CAU'];
 
 /* ═══════════════════════════════════════════════════════ */
@@ -287,6 +283,7 @@ function determinarUsuario() {
 
 let activeTab = null;
 let despachoAgrupar = true;
+let despachoFiltroPago = 'todos';   // 'todos' | 'pagados' | 'pendientes'
 const filtros = { search:'', conciliado:'', entregado:'', colaborador:'', incompletos:false };
 
 /* ═══════════════════════════════════════════════════════ */
@@ -377,7 +374,6 @@ function renderProgress() {
   const entregadas = data.ventas.filter(v => v.entregado).reduce((s,v) => s + Number(v.cantidad||0), 0);
   const pct = meta > 0 ? Math.min(100, Math.round((vendidas/meta)*100)) : 0;
   const libres = Math.max(0, meta - vendidas);
-  const pctVend = pct;
   const pctConc = vendidas > 0 ? Math.round((conciliadas/vendidas)*100) : 0;
   const pctEnt  = vendidas > 0 ? Math.round((entregadas/vendidas)*100) : 0;
 
@@ -403,7 +399,7 @@ function renderProgress() {
             <span class="text-brand-600">${vendidas}/${meta}</span>
           </div>
           <div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
-            <div class="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-500" style="width:${pctVend}%"></div>
+            <div class="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-500" style="width:${pct}%"></div>
           </div>
         </div>
         <div>
@@ -449,11 +445,11 @@ function renderStats() {
       { label:'Disponibles', value:Math.max(0, meta-sopas), icon:'package',   color:'text-amber-600',  bg:'bg-amber-50' }
     ];
   } else {
-    const listas = data.ventas.filter(v => v.conciliado && !v.entregado);
+    const listas = data.ventas.filter(v => !v.entregado);
     const ent = data.ventas.filter(v => v.entregado);
     cards = [
-      { label:'Por entregar', value:listas.length + ' ped.', icon:'package',    color:'text-sky-600',    bg:'bg-sky-50' },
-      { label:'Sopas pendientes', value:listas.reduce((s,v)=>s+Number(v.cantidad||0),0), icon:'soup', color:'text-brand-600', bg:'bg-brand-50' },
+      { label:'Por entregar', value:listas.length + ' ped.', icon:'package',    color:'text-brand-600',  bg:'bg-brand-50' },
+      { label:'Sopas pendientes', value:listas.reduce((s,v)=>s+Number(v.cantidad||0),0), icon:'soup', color:'text-sky-600', bg:'bg-sky-50' },
       { label:'Entregadas hoy', value:ent.filter(v => esHoy(v.entregadoFecha)).length, icon:'check-circle-2', color:'text-emerald-600', bg:'bg-emerald-50' },
       { label:'Total entregadas', value:ent.length + ' ped.', icon:'truck',       color:'text-slate-600',  bg:'bg-slate-100' }
     ];
@@ -510,7 +506,7 @@ function panelDashboard() {
   const porCobrar = data.ventas.filter(v => !v.conciliado);
   const montoPorCobrar = porCobrar.reduce((s,v) => s + Number(v.montoPagado||0), 0);
   const sopasPorCobrar = porCobrar.reduce((s,v) => s + Number(v.cantidad||0), 0);
-  const porDespachar = data.ventas.filter(v => v.conciliado && !v.entregado);
+  const porDespachar = data.ventas.filter(v => !v.entregado);
   const sopasPorDespachar = porDespachar.reduce((s,v) => s + Number(v.cantidad||0), 0);
   const entregadas = data.ventas.filter(v => v.entregado);
   const sopasEntregadas = entregadas.reduce((s,v) => s + Number(v.cantidad||0), 0);
@@ -548,9 +544,9 @@ function panelDashboard() {
             <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 grid place-items-center mb-3">
               <i data-lucide="clock" class="w-5 h-5"></i>
             </div>
-            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por cobrar</p>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por conciliar</p>
             <p class="text-3xl font-extrabold text-amber-700 leading-none mt-1">${money(montoPorCobrar)}</p>
-            <p class="text-xs text-slate-500 mt-1">${porCobrar.length} pedido(s) · ${sopasPorCobrar} sopa(s) sin conciliar</p>
+            <p class="text-xs text-slate-500 mt-1">${porCobrar.length} pedido(s) · ${sopasPorCobrar} sopa(s)</p>
           </div>
         </div>
         <div class="bg-white rounded-2xl border border-sky-200 shadow-sm p-5 relative overflow-hidden">
@@ -561,7 +557,7 @@ function panelDashboard() {
             </div>
             <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por despachar</p>
             <p class="text-3xl font-extrabold text-sky-700 leading-none mt-1">${sopasPorDespachar}</p>
-            <p class="text-xs text-slate-500 mt-1">${porDespachar.length} pedido(s) conciliados sin entregar</p>
+            <p class="text-xs text-slate-500 mt-1">${porDespachar.length} pedido(s) pendientes de entrega</p>
           </div>
         </div>
       </div>
@@ -650,8 +646,8 @@ function panelDashboard() {
                     <p class="font-semibold text-sm text-slate-800 truncate">${esc(v.cliente || 'Sin nombre')}</p>
                     <p class="text-[11px] text-slate-400">${esc(v.ubicacion || 'sin ubicación')}${v.piso?' · Piso '+esc(v.piso):''}${v.departamento?' · Depto '+esc(v.departamento):''}</p>
                   </div>
-                  <span class="inline-flex items-center gap-1 bg-sky-100 text-sky-800 text-xs font-bold px-2 py-0.5 rounded-full shrink-0">
-                    <i data-lucide="soup" class="w-3 h-3"></i>${v.cantidad}
+                  <span class="inline-flex items-center gap-1 ${v.conciliado ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} text-xs font-bold px-2 py-0.5 rounded-full shrink-0">
+                    <i data-lucide="${v.conciliado ? 'badge-check' : 'clock'}" class="w-3 h-3"></i>${v.cantidad}
                   </span>
                 </div>
               `).join('')}
@@ -1106,40 +1102,51 @@ function panelTesorero() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   DESPACHADOR · DOS LISTADOS (Por entregar / Entregados)
+   DESPACHADOR · Muestra TODO lo vendido, con estado de pago visible
    ═══════════════════════════════════════════════════════ */
 function panelDespachador() {
-  const conciliadas = ventasOrd().filter(v => v.conciliado);
-  const pendientes = conciliadas.filter(v => !v.entregado);
-  const entregadas = conciliadas.filter(v => v.entregado);
+  const todas = ventasOrd();
+
+  let pendientes = todas.filter(v => !v.entregado);
+  const entregadas = todas.filter(v => v.entregado);
+
+  // Filtro por estado de pago
+  if (despachoFiltroPago === 'pagados')    pendientes = pendientes.filter(v => v.conciliado);
+  if (despachoFiltroPago === 'pendientes') pendientes = pendientes.filter(v => !v.conciliado);
 
   const sopasPend = pendientes.reduce((s,v) => s + Number(v.cantidad||0), 0);
   const sopasEnt  = entregadas.reduce((s,v) => s + Number(v.cantidad||0), 0);
-  const totalPed = pendientes.length + entregadas.length;
-  const totalSop = sopasPend + sopasEnt;
-  const pctEnt = totalSop > 0 ? Math.round((sopasEnt/totalSop)*100) : 0;
+  const totalVendidas = todas.reduce((s,v) => s + Number(v.cantidad||0), 0);
+  const sopasPagadas = todas.filter(v => v.conciliado).reduce((s,v) => s + Number(v.cantidad||0), 0);
+
+  const pctEnt = totalVendidas > 0 ? Math.round((sopasEnt/totalVendidas)*100) : 0;
+
+  const pendConPago = pendientes.filter(v => v.conciliado).length;
+  const pendSinPago = pendientes.filter(v => !v.conciliado).length;
 
   return `
     <div class="space-y-4">
 
-      <!-- Barra de progreso global de entregas -->
+      <!-- Panel de progreso y filtros -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
             <h2 class="text-lg font-extrabold text-slate-900">Panel de Entregas</h2>
             <p class="text-xs text-slate-500 mt-0.5">
-              ${totalPed} pedido(s) conciliados · ${totalSop} sopas en total
+              ${todas.length} pedido(s) vendidos · ${totalVendidas} sopas en total
             </p>
           </div>
           <div class="text-right">
             <p class="text-3xl font-extrabold text-emerald-600 leading-none">${pctEnt}%</p>
-            <p class="text-[11px] text-slate-500 mt-1">${sopasEnt} de ${totalSop} sopas entregadas</p>
+            <p class="text-[11px] text-slate-500 mt-1">${sopasEnt} de ${totalVendidas} sopas entregadas</p>
           </div>
         </div>
+
         <div class="h-3 w-full bg-brand-100 rounded-full overflow-hidden">
           <div class="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500" style="width:${pctEnt}%"></div>
         </div>
-        <div class="flex items-center justify-between text-[11px] mt-2">
+
+        <div class="flex items-center justify-between text-[11px] mt-2 flex-wrap gap-2">
           <span class="flex items-center gap-1 text-brand-700 font-bold">
             <span class="w-2 h-2 rounded-full bg-brand-400"></span> Por entregar: ${sopasPend} sopa(s) · ${pendientes.length} ped.
           </span>
@@ -1148,8 +1155,30 @@ function panelDespachador() {
           </span>
         </div>
 
-        <div class="mt-3 flex justify-end">
-          <button id="btn-agrupar" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+        <!-- Aviso si hay pedidos sin pago -->
+        ${pendSinPago > 0 ? `
+          <div class="mt-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-2.5 flex items-start gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 mt-0.5"></i>
+            <span><b>${pendSinPago} pedido(s)</b> aún no tienen pago confirmado por tesorería. La <b>referencia bancaria</b> está visible en cada tarjeta para que verifiques con el vendedor antes de entregar.</span>
+          </div>
+        ` : ''}
+
+        <!-- Filtros -->
+        <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1">Filtrar:</span>
+          <button data-filtro-pago="todos" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+            ${despachoFiltroPago === 'todos' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+            <i data-lucide="list" class="w-3.5 h-3.5"></i> Todos (${todas.filter(v => !v.entregado).length})
+          </button>
+          <button data-filtro-pago="pagados" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+            ${despachoFiltroPago === 'pagados' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+            <i data-lucide="badge-check" class="w-3.5 h-3.5"></i> Con pago confirmado (${pendConPago})
+          </button>
+          <button data-filtro-pago="pendientes" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+            ${despachoFiltroPago === 'pendientes' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i> Sin confirmar pago (${pendSinPago})
+          </button>
+          <button id="btn-agrupar" class="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
             ${despachoAgrupar ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
             <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> Agrupar por ubicación
           </button>
@@ -1159,9 +1188,8 @@ function panelDespachador() {
       <!-- DOS LISTADOS lado a lado -->
       <div class="grid lg:grid-cols-2 gap-4">
 
-        <!-- ══ COLUMNA IZQUIERDA: POR ENTREGAR ══ -->
         <div class="bg-white rounded-2xl border-2 border-brand-200 shadow-sm overflow-hidden flex flex-col">
-          <div class="p-3 bg-brand-50 border-b border-brand-100 flex items-center justify-between sticky top-0 z-10">
+          <div class="p-3 bg-brand-50 border-b border-brand-100 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <div class="w-9 h-9 rounded-xl bg-brand-500 text-white grid place-items-center">
                 <i data-lucide="package" class="w-4 h-4"></i>
@@ -1175,14 +1203,13 @@ function panelDespachador() {
               ${pendientes.length}
             </span>
           </div>
-          <div class="p-3 space-y-2 flex-1 min-h-[200px]">
+          <div class="p-3 space-y-2 flex-1 min-h-[200px] max-h-[calc(100vh-320px)] overflow-y-auto">
             ${renderColumnaEntregas(pendientes, false)}
           </div>
         </div>
 
-        <!-- ══ COLUMNA DERECHA: ENTREGADOS ══ -->
         <div class="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden flex flex-col">
-          <div class="p-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between sticky top-0 z-10">
+          <div class="p-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <div class="w-9 h-9 rounded-xl bg-emerald-500 text-white grid place-items-center">
                 <i data-lucide="check-circle-2" class="w-4 h-4"></i>
@@ -1196,16 +1223,16 @@ function panelDespachador() {
               ${entregadas.length}
             </span>
           </div>
-          <div class="p-3 space-y-2 flex-1 min-h-[200px]">
+          <div class="p-3 space-y-2 flex-1 min-h-[200px] max-h-[calc(100vh-320px)] overflow-y-auto">
             ${renderColumnaEntregas(entregadas, true)}
           </div>
         </div>
       </div>
 
-      ${totalPed === 0 ? `
+      ${todas.length === 0 ? `
         <div class="bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-xl p-3 flex items-start gap-2">
           <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
-          <span>Aquí aparecerán los pedidos <b>una vez el tesorero los concilie</b>. Cuando concilie el pago, el pedido pasará automáticamente a "Por entregar".</span>
+          <span>Aún no hay ventas registradas. Los colaboradores deben registrar pedidos primero.</span>
         </div>
       ` : ''}
     </div>`;
@@ -1240,7 +1267,7 @@ function renderColumnaEntregas(items, done) {
     const iconCls = done ? 'text-emerald-600' : 'text-brand-600';
     return `
       <div class="mb-3 last:mb-0">
-        <div class="flex items-center gap-2 px-3 py-1.5 ${colorCls} rounded-lg mb-2">
+        <div class="flex items-center gap-2 px-3 py-1.5 ${colorCls} rounded-lg mb-2 sticky top-0 z-[1]">
           <i data-lucide="map-pin" class="w-3.5 h-3.5 ${iconCls}"></i>
           <span class="font-bold text-xs truncate">${esc(ubi)}</span>
           <span class="ml-auto text-[10px] font-semibold whitespace-nowrap">${grupoItems.length} · ${grupoSopas} sopa(s)</span>
@@ -1253,18 +1280,54 @@ function renderColumnaEntregas(items, done) {
 }
 
 function cardDespachoItem(v, done) {
+  const pagado = v.conciliado;
+  const sinPago = !pagado && !done;
+
+  // Estilos según estado de pago (solo cuando no está entregado)
+  const borderCls = done
+    ? 'bg-emerald-50/50 border-emerald-200'
+    : pagado
+      ? 'bg-emerald-50/30 border-emerald-200'
+      : 'bg-amber-50/50 border-amber-300';
+
   return `
-    <div class="${done ? 'bg-emerald-50/50 border-emerald-200' : 'bg-brand-50/40 border-brand-200'} border rounded-xl p-3 transition hover:shadow-sm">
+    <div class="${borderCls} border-2 rounded-xl p-3 transition hover:shadow-sm">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <p class="font-bold text-slate-900 text-sm leading-tight truncate">${val(v.cliente, 'Sin nombre')}</p>
-          <p class="text-[11px] mt-0.5 ${v.telefono ? 'text-slate-500' : 'missing'}">
+          <p class="text-[11px] mt-0.5 ${v.telefono ? 'text-slate-600' : 'missing'}">
             ${v.telefono ? `<a href="tel:${esc(v.telefono)}" class="hover:underline font-medium">${esc(v.telefono)}</a>` : 'sin teléfono'}
           </p>
         </div>
-        <span class="shrink-0 inline-flex items-center gap-1 ${done ? 'bg-emerald-500' : 'bg-brand-500'} text-white text-xs font-extrabold px-2.5 py-1 rounded-full">
+        <span class="shrink-0 inline-flex items-center gap-1 ${done ? 'bg-emerald-600' : 'bg-brand-500'} text-white text-xs font-extrabold px-2.5 py-1 rounded-full">
           <i data-lucide="soup" class="w-3 h-3"></i>${v.cantidad||0}
         </span>
+      </div>
+
+      <!-- Estado de pago (destacado) -->
+      ${!done ? `
+        <div class="mt-2">
+          ${pagado ? `
+            <div class="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full">
+              <i data-lucide="badge-check" class="w-3.5 h-3.5"></i> PAGO CONFIRMADO
+            </div>
+          ` : `
+            <div class="inline-flex items-center gap-1.5 bg-amber-500 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-full">
+              <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> VERIFICAR PAGO
+            </div>
+          `}
+        </div>
+      ` : ''}
+
+      <!-- Referencia bancaria destacada -->
+      <div class="mt-2 bg-white/80 border ${v.referencia ? 'border-slate-200' : 'border-amber-300 border-dashed'} rounded-lg px-2.5 py-1.5">
+        <p class="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Referencia bancaria</p>
+        <p class="font-mono text-sm font-bold ${v.referencia ? 'text-slate-800' : 'text-amber-600 italic text-xs'} break-all">
+          ${v.referencia ? esc(v.referencia) : 'SIN REFERENCIA'}
+        </p>
+        ${v.montoPagado ? `
+          <p class="text-[10px] text-slate-500 mt-0.5">Monto declarado: <b class="text-slate-700">${money(v.montoPagado)}</b></p>
+        ` : ''}
       </div>
 
       <div class="mt-2 space-y-1 text-[11px] text-slate-600">
@@ -1274,12 +1337,12 @@ function cardDespachoItem(v, done) {
             ${esc(v.ubicacion || 'Sin ubicación')}${v.piso?` · Piso ${esc(v.piso)}`:''}${v.departamento?` · Depto ${esc(v.departamento)}`:''}
           </span>
         </div>
-        ${v.referencia ? `<div class="flex items-center gap-1.5 text-slate-400">
-          <i data-lucide="hash" class="w-3 h-3 shrink-0"></i>
-          <span class="font-mono truncate">${esc(v.referencia)}</span>
-        </div>` : ''}
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <i data-lucide="user" class="w-3 h-3 shrink-0"></i>
+          <span>Vendedor: ${esc(v.colaborador || '—')}</span>
+        </div>
         ${done && v.entregadoPor ? `
-          <div class="flex items-center gap-1.5 text-emerald-700 font-semibold">
+          <div class="flex items-center gap-1.5 text-emerald-700 font-semibold mt-1 pt-1 border-t border-emerald-200">
             <i data-lucide="user-check" class="w-3 h-3 shrink-0"></i>
             <span>Entregó: <b>${esc(v.entregadoPor)}</b></span>
           </div>
@@ -1297,7 +1360,7 @@ function cardDespachoItem(v, done) {
                <i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Devolver a pendientes
              </button>`
           : `<button data-ent="${v.id}"
-               class="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-sm font-bold px-3 py-2.5 rounded-lg shadow-sm transition">
+               class="w-full inline-flex items-center justify-center gap-1.5 ${pagado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-sky-600 hover:bg-sky-700'} active:scale-95 text-white text-sm font-bold px-3 py-2.5 rounded-lg shadow-sm transition">
                <i data-lucide="check" class="w-4 h-4"></i> Marcar como entregado
              </button>`}
       </div>
@@ -1539,6 +1602,13 @@ $('#panel').addEventListener('click', async e => {
   if (tb) { activeTab = tb.dataset.tab; render(); return; }
   if (e.target.closest('#btn-new-inline')) { openModal(); return; }
 
+  const filtro = e.target.closest('[data-filtro-pago]');
+  if (filtro) {
+    despachoFiltroPago = filtro.dataset.filtroPago;
+    renderPanel();
+    return;
+  }
+
   const cp = e.target.closest('[data-copy]');
   if (cp) {
     const link = cp.dataset.copy;
@@ -1583,11 +1653,15 @@ $('#panel').addEventListener('click', async e => {
     const cant = v.cantidad || 0;
     const quien = user.nombre || 'Despachador';
     const ubic = v.ubicacion || 'sin ubicación';
+    const ref = v.referencia || 'SIN REFERENCIA';
+    const pago = v.conciliado ? '✓ CONFIRMADO por tesorería' : '⚠ AÚN SIN CONFIRMAR';
     const ok = confirm(
       `CONFIRMAR ENTREGA\n\n` +
       `Cliente: ${cliente}\n` +
       `Cantidad: ${cant} sopa(s)\n` +
       `Ubicación: ${ubic}\n` +
+      `Referencia bancaria: ${ref}\n` +
+      `Estado del pago: ${pago}\n` +
       `Entrega: ${quien}\n\n` +
       `¿Confirmas la entrega?`
     );
