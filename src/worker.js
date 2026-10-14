@@ -3,7 +3,6 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // CORS para permitir peticiones desde el navegador
     const cors = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
@@ -14,9 +13,7 @@ export default {
       return new Response(null, { headers: cors });
     }
 
-    // ═══════════════════════════════════════════
-    // API: GET /api/ventas → devuelve todas las ventas
-    // ═══════════════════════════════════════════
+    // ═══════ API VENTAS ═══════
     if (path === '/api/ventas' && request.method === 'GET') {
       try {
         const { results } = await env.DB.prepare(
@@ -28,9 +25,6 @@ export default {
       }
     }
 
-    // ═══════════════════════════════════════════
-    // API: POST /api/ventas → guarda o actualiza una venta
-    // ═══════════════════════════════════════════
     if (path === '/api/ventas' && request.method === 'POST') {
       try {
         const v = await request.json();
@@ -77,9 +71,6 @@ export default {
       }
     }
 
-    // ══��════════════════════════════════════════
-    // API: DELETE /api/ventas/:id → elimina una venta
-    // ═══════════════════════════════════════════
     if (path.startsWith('/api/ventas/') && request.method === 'DELETE') {
       try {
         const id = path.split('/').pop();
@@ -90,9 +81,52 @@ export default {
       }
     }
 
-    // ═══════════════════════════════════════════
-    // Cualquier otra ruta → sirve el index.html
-    // ═══════════════════════════════════════════
+    // ═══════ API EQUIPO ═══════
+    if (path === '/api/equipo' && request.method === 'GET') {
+      try {
+        const { results } = await env.DB.prepare(
+          'SELECT id, tipo, nombre, email FROM equipo ORDER BY tipo, nombre'
+        ).all();
+        return Response.json(results, { headers: cors });
+      } catch (err) {
+        return Response.json({ error: err.message }, { status: 500, headers: cors });
+      }
+    }
+
+    if (path === '/api/equipo' && request.method === 'POST') {
+      try {
+        const p = await request.json();
+        if (!p.id || !p.tipo || !p.email) {
+          return Response.json({ error: 'Faltan id, tipo o email' }, { status: 400, headers: cors });
+        }
+        await env.DB.prepare(`
+          INSERT INTO equipo (id, tipo, nombre, email, fecha)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            tipo = excluded.tipo,
+            nombre = excluded.nombre,
+            email = excluded.email,
+            fecha = excluded.fecha
+        `).bind(
+          p.id, p.tipo, p.nombre || '', String(p.email).toLowerCase(), new Date().toISOString()
+        ).run();
+        return Response.json({ ok: true }, { headers: cors });
+      } catch (err) {
+        return Response.json({ error: err.message }, { status: 500, headers: cors });
+      }
+    }
+
+    if (path.startsWith('/api/equipo/') && request.method === 'DELETE') {
+      try {
+        const id = path.split('/').pop();
+        await env.DB.prepare('DELETE FROM equipo WHERE id = ?').bind(id).run();
+        return Response.json({ ok: true }, { headers: cors });
+      } catch (err) {
+        return Response.json({ error: err.message }, { status: 500, headers: cors });
+      }
+    }
+
+    // ═══════ SITIO ESTÁTICO ═══════
     return env.ASSETS.fetch(request);
   }
 };
