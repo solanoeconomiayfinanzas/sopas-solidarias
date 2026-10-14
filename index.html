@@ -43,6 +43,8 @@ tailwind.config = {
   .loading{ position:fixed; inset:0; background:rgba(255,255,255,.85); backdrop-filter:blur(4px); z-index:100; display:grid; place-items:center; }
   .spinner{ width:40px; height:40px; border:4px solid #e2e8f0; border-top-color:#f97316; border-radius:50%; animation: spin .8s linear infinite; }
   @keyframes spin{ to{ transform: rotate(360deg); } }
+  .stat-card{ transition: all .15s ease; }
+  .stat-card:hover{ transform: translateY(-2px); }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen">
@@ -56,7 +58,7 @@ tailwind.config = {
 
 <!-- ═══════════ SELECCIÓN ═══════════ -->
 <div id="screen-select" class="hidden min-h-screen items-center justify-center p-5" style="display:none">
-  <div class="w-full max-w-2xl">
+  <div class="w-full max-w-3xl">
     <div class="text-center mb-8">
       <div class="w-16 h-16 mx-auto rounded-2xl bg-brand-500 text-white grid place-items-center shadow-lg shadow-brand-500/30">
         <i data-lucide="soup" class="w-8 h-8"></i>
@@ -65,17 +67,17 @@ tailwind.config = {
       <p id="sel-sub" class="text-slate-500 mt-2">Acceso por enlace personal · Sin contraseñas</p>
     </div>
     <a href="?rol=admin"
-       class="group block bg-slate-900 rounded-2xl shadow-sm hover:shadow-lg p-6 flex items-center gap-4 transition mb-4">
+       class="group block bg-slate-900 rounded-2xl shadow-sm hover:shadow-lg p-5 flex items-center gap-4 transition mb-4">
       <div class="w-12 h-12 rounded-xl bg-white/10 text-white grid place-items-center">
         <i data-lucide="shield-check" class="w-6 h-6"></i>
       </div>
       <div class="min-w-0 flex-1">
         <p class="font-bold text-white text-lg leading-tight">Acceso Superadmin</p>
-        <p class="text-xs text-slate-400 mt-0.5">Configura correos, campaña y respaldo</p>
+        <p class="text-xs text-slate-400 mt-0.5">Dashboard, correos, campaña y respaldo</p>
       </div>
       <i data-lucide="arrow-right" class="w-5 h-5 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition"></i>
     </a>
-    <div id="sel-links" class="space-y-2"></div>
+    <div id="sel-links" class="grid sm:grid-cols-2 gap-3"></div>
     <p class="text-center text-xs text-slate-400 mt-8">
       Los colaboradores, tesorero y despachadores acceden con el enlace único que el superadmin les comparte.
     </p>
@@ -85,7 +87,7 @@ tailwind.config = {
 <!-- ═══════════ APP ═══════════ -->
 <div id="screen-app" class="hidden">
   <header class="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-slate-200">
-    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-10 h-10 shrink-0 rounded-xl bg-brand-500 text-white grid place-items-center shadow-sm shadow-brand-500/40">
           <i data-lucide="soup" class="w-5 h-5"></i>
@@ -106,8 +108,9 @@ tailwind.config = {
       </div>
     </div>
   </header>
-  <main class="max-w-6xl mx-auto px-4 py-6 space-y-5">
-    <section id="progress-card" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 fade-in"></section>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-5">
+    <section id="progress-card" class="fade-in"></section>
     <section id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"></section>
     <nav id="tabs" class="flex gap-1 p-1 bg-white rounded-xl border border-slate-200 shadow-sm w-fit max-w-full overflow-x-auto"></nav>
     <section id="panel" class="fade-in"></section>
@@ -127,7 +130,10 @@ tailwind.config = {
    CONFIG
    ═══════════════════════════════════════════════════════ */
 const API = '/api/ventas';
-const CONFIG_KEY = 'sopa_config_v3';
+const CONFIG_KEY = 'sopa_config_v4';
+
+/* Ubicaciones base (el primer colaborador puede agregar nuevas) */
+const BASE_UBICACIONES = ['EDIF. CORPORATIVO', 'PIM', 'PROYECTOS', 'CAU'];
 
 /* ═══════════════════════════════════════════════════════
    UTILIDADES
@@ -142,10 +148,11 @@ const LBL = 'block text-xs font-bold text-slate-500 mb-1.5';
 const val = (v, fb = '—') => v && String(v).trim() ? esc(v) : `<span class="missing">${fb}</span>`;
 
 function inlineCell(id, field, value, opts = {}) {
-  const { type='text', extra='', ph='', min='', max='', step='' } = opts;
+  const { type='text', extra='', ph='', min='', max='', step='', list='' } = opts;
   return `<input data-inline data-id="${id}" data-field="${field}" type="${type}"
     value="${esc(value ?? '')}" placeholder="${esc(ph)}"
     ${min!=='' ? `min="${min}"` : ''} ${max!=='' ? `max="${max}"` : ''} ${step!=='' ? `step="${step}"` : ''}
+    ${list ? `list="${list}"` : ''}
     class="inline-edit ${extra}">`;
 }
 
@@ -161,7 +168,7 @@ function toast(msg, type='ok') {
 }
 
 /* ═══════════════════════════════════════════════════════
-   DATOS · config local + ventas desde API
+   DATOS
    ═══════════════════════════════════════════════════════ */
 const defaultConfig = { titulo:'Sopas Solidarias', beneficiario:'Ayuda para un enfermo', meta:120, precio:5, moneda:'$' };
 const defaultEquipo = { colaboradores: [], tesoreroEmail: '', despachadores: [] };
@@ -214,7 +221,6 @@ async function cargarVentasDesdeAPI() {
   }
 }
 
-/* Guarda una venta en el servidor. Si venta==null, no hace nada remoto. */
 async function guardarVenta(venta) {
   if (!venta) return;
   try {
@@ -230,11 +236,8 @@ async function guardarVenta(venta) {
   }
 }
 async function borrarVentaAPI(id) {
-  try {
-    await fetch(API + '/' + id, { method: 'DELETE' });
-  } catch (e) {
-    toast('Error al eliminar en servidor', 'error');
-  }
+  try { await fetch(API + '/' + id, { method: 'DELETE' }); }
+  catch { toast('Error al eliminar en servidor', 'error'); }
 }
 
 /* Derivados */
@@ -251,6 +254,21 @@ const badgeIncompleta = v => estaIncompleta(v) ? `
   <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
     <i data-lucide="alert-triangle" class="w-3 h-3"></i> Incompleta
   </span>` : '';
+
+/* Lista de ubicaciones disponibles: base + las usadas en ventas */
+function getUbicacionesDisponibles() {
+  const set = new Set(BASE_UBICACIONES);
+  data.ventas.forEach(v => {
+    const u = (v.ubicacion || '').trim().toUpperCase();
+    if (u) set.add(u);
+  });
+  return [...set].sort();
+}
+function ubicacionesDatalist() {
+  return `<datalist id="ubicaciones-list">
+    ${getUbicacionesDisponibles().map(u => `<option value="${esc(u)}"></option>`).join('')}
+  </datalist>`;
+}
 
 /* ═══════════════════════════════════════════════════════
    ACCESO POR URL
@@ -277,6 +295,8 @@ function determinarUsuario() {
 }
 
 let activeTab = null;
+let despachoVista = 'lista';
+let despachoAgrupar = true;
 const filtros = { search:'', conciliado:'', entregado:'', colaborador:'', incompletos:false };
 
 /* ═══════════════════════════════════════════════════════
@@ -306,8 +326,7 @@ function renderSelect() {
   }));
 
   $('#sel-links').innerHTML = rows.length
-    ? `<p class="text-xs font-bold uppercase tracking-wider text-slate-400 mt-6 mb-2 px-1">Accesos configurados</p>` +
-      rows.map(r => `
+    ? rows.map(r => `
       <a href="${r.href}" class="group flex items-center gap-3 bg-white rounded-xl border border-slate-200 hover:border-brand-300 hover:shadow-sm p-3 transition">
         <div class="w-9 h-9 rounded-lg ${r.color} grid place-items-center shrink-0">
           <i data-lucide="${r.icon}" class="w-4 h-4"></i>
@@ -318,7 +337,7 @@ function renderSelect() {
         </div>
         <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 group-hover:text-brand-500"></i>
       </a>`).join('')
-    : `<div class="mt-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl p-4 text-center">
+    : `<div class="sm:col-span-2 mt-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-2xl p-4 text-center">
         Aún no hay accesos configurados. Entra como Superadmin para agregar correos.
       </div>`;
   icons();
@@ -329,6 +348,7 @@ function renderSelect() {
    ═══════════════════════════════════════════════════════ */
 const TABS = {
   admin: [
+    {id:'dashboard', label:'Dashboard', icon:'pie-chart'},
     {id:'ventas', label:'Ventas', icon:'receipt'},
     {id:'equipo', label:'Equipo', icon:'users'},
     {id:'campaña', label:'Campaña', icon:'settings'},
@@ -364,27 +384,64 @@ function renderHeader() {
   $('#btn-new').classList.toggle('hidden', user.rol !== 'colaborador');
 }
 
+/* Progreso horizontal de 3 etapas */
 function renderProgress() {
   const meta = Number(data.config.meta) || 0;
   const vendidas = totalSopas();
+  const conciliadas = data.ventas.filter(v => v.conciliado).reduce((s,v) => s + Number(v.cantidad||0), 0);
+  const entregadas = data.ventas.filter(v => v.entregado).reduce((s,v) => s + Number(v.cantidad||0), 0);
   const pct = meta > 0 ? Math.min(100, Math.round((vendidas/meta)*100)) : 0;
   const libres = Math.max(0, meta - vendidas);
+
+  const pctVend = pct;
+  const pctConc = vendidas > 0 ? Math.round((conciliadas/vendidas)*100) : 0;
+  const pctEnt  = vendidas > 0 ? Math.round((entregadas/vendidas)*100) : 0;
+
   $('#progress-card').innerHTML = `
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Progreso de la campaña</p>
-        <p class="mt-1 text-2xl font-extrabold text-slate-900">
-          <span>${vendidas}</span><span class="text-slate-300 mx-1">/</span><span>${meta}</span>
-          <span class="text-base font-semibold text-slate-500 ml-1">sopas</span>
-        </p>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Avance global de la campaña</p>
+          <p class="mt-1 text-3xl font-extrabold text-slate-900 leading-none">
+            <span class="text-brand-600">${vendidas}</span><span class="text-slate-300 mx-1.5">/</span><span>${meta}</span>
+            <span class="text-base font-semibold text-slate-500 ml-2">sopas vendidas</span>
+          </p>
+        </div>
+        <div class="text-right">
+          <p class="text-4xl font-extrabold text-brand-600 leading-none">${pct}%</p>
+          <p class="text-xs text-slate-500 mt-1">${libres === 0 ? '¡Meta completada!' : libres + ' por vender'}</p>
+        </div>
       </div>
-      <div class="text-right">
-        <p class="text-3xl font-extrabold text-brand-600 leading-none">${pct}%</p>
-        <p class="text-xs text-slate-500 mt-1">${libres === 0 ? '¡Meta completada!' : libres + ' disponibles'}</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+            <span class="flex items-center gap-1"><i data-lucide="shopping-cart" class="w-3.5 h-3.5 text-brand-500"></i> Vendidas</span>
+            <span class="text-brand-600">${vendidas}/${meta}</span>
+          </div>
+          <div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-500" style="width:${pctVend}%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+            <span class="flex items-center gap-1"><i data-lucide="badge-check" class="w-3.5 h-3.5 text-emerald-500"></i> Conciliadas</span>
+            <span class="text-emerald-600">${conciliadas}/${vendidas}</span>
+          </div>
+          <div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500" style="width:${pctConc}%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+            <span class="flex items-center gap-1"><i data-lucide="truck" class="w-3.5 h-3.5 text-sky-500"></i> Entregadas</span>
+            <span class="text-sky-600">${entregadas}/${vendidas}</span>
+          </div>
+          <div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-sky-400 to-sky-600 transition-all duration-500" style="width:${pctEnt}%"></div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="mt-4 h-3 w-full bg-slate-100 rounded-full overflow-hidden">
-      <div class="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-500" style="width:${pct}%"></div>
     </div>`;
 }
 
@@ -395,8 +452,8 @@ function renderStats() {
     cards = [
       { label:'Recaudado',   value:money(totalRecaudado()),  icon:'wallet',       color:'text-emerald-600', bg:'bg-emerald-50' },
       { label:'Conciliado',  value:money(totalConciliado()), icon:'badge-check',  color:'text-sky-600',    bg:'bg-sky-50' },
-      { label:'Entregadas',  value:totalEntregado(),         icon:'truck',        color:'text-brand-600',  bg:'bg-brand-50' },
-      { label:'Pendientes',  value:money(totalRecaudado()-totalConciliado()), icon:'clock', color:'text-amber-600', bg:'bg-amber-50' }
+      { label:'Entregadas',  value:totalEntregado() + ' sopas', icon:'truck',     color:'text-brand-600',  bg:'bg-brand-50' },
+      { label:'Por conciliar', value:money(totalRecaudado()-totalConciliado()), icon:'clock', color:'text-amber-600', bg:'bg-amber-50' }
     ];
   } else if (user.rol === 'colaborador') {
     const mias = data.ventas.filter(v => v.colaboradorEmail === user.email);
@@ -412,14 +469,14 @@ function renderStats() {
     const listas = data.ventas.filter(v => v.conciliado && !v.entregado);
     const ent = data.ventas.filter(v => v.entregado);
     cards = [
-      { label:'Por entregar', value:listas.length,           icon:'package',      color:'text-sky-600',    bg:'bg-sky-50' },
-      { label:'Sopas por entregar', value:listas.reduce((s,v)=>s+Number(v.cantidad||0),0), icon:'soup', color:'text-brand-600', bg:'bg-brand-50' },
+      { label:'Por entregar', value:listas.length + ' ped.', icon:'package',    color:'text-sky-600',    bg:'bg-sky-50' },
+      { label:'Sopas pendientes', value:listas.reduce((s,v)=>s+Number(v.cantidad||0),0), icon:'soup', color:'text-brand-600', bg:'bg-brand-50' },
       { label:'Entregadas hoy', value:ent.filter(v => esHoy(v.entregadoFecha)).length, icon:'check-circle-2', color:'text-emerald-600', bg:'bg-emerald-50' },
-      { label:'Total entregadas', value:ent.length,          icon:'truck',        color:'text-slate-600',  bg:'bg-slate-100' }
+      { label:'Total entregadas', value:ent.length + ' ped.', icon:'truck',       color:'text-slate-600',  bg:'bg-slate-100' }
     ];
   }
   $('#stats').innerHTML = cards.map(c => `
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+    <div class="stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
       <div class="w-9 h-9 rounded-lg ${c.bg} ${c.color} grid place-items-center mb-3">
         <i data-lucide="${c.icon}" style="width:18px;height:18px"></i>
       </div>
@@ -445,7 +502,8 @@ function renderTabs() {
 function renderPanel() {
   const p = $('#panel');
   if (user.rol === 'admin') {
-    if (activeTab === 'ventas') p.innerHTML = panelAdminVentas();
+    if (activeTab === 'dashboard') p.innerHTML = panelDashboard();
+    else if (activeTab === 'ventas') p.innerHTML = panelAdminVentas();
     else if (activeTab === 'equipo') p.innerHTML = panelEquipo();
     else if (activeTab === 'campaña') p.innerHTML = panelCampaña();
     else if (activeTab === 'respaldo') p.innerHTML = panelRespaldo();
@@ -460,6 +518,184 @@ const hintBanner = `
     <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i>
     <span>Toca cualquier celda para editarla. Se guarda automáticamente en el servidor al salir.</span>
   </div>`;
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN · DASHBOARD (nuevo)
+   ═══════════════════════════════════════════════════════ */
+function panelDashboard() {
+  const meta = Number(data.config.meta) || 0;
+  const vendidas = totalSopas();
+  const porVender = Math.max(0, meta - vendidas);
+
+  const porCobrar = data.ventas.filter(v => !v.conciliado);
+  const montoPorCobrar = porCobrar.reduce((s,v) => s + Number(v.montoPagado||0), 0);
+  const sopasPorCobrar = porCobrar.reduce((s,v) => s + Number(v.cantidad||0), 0);
+
+  const porDespachar = data.ventas.filter(v => v.conciliado && !v.entregado);
+  const sopasPorDespachar = porDespachar.reduce((s,v) => s + Number(v.cantidad||0), 0);
+
+  const entregadas = data.ventas.filter(v => v.entregado);
+  const sopasEntregadas = entregadas.reduce((s,v) => s + Number(v.cantidad||0), 0);
+
+  const recaudado = totalRecaudado();
+  const conciliado = totalConciliado();
+
+  /* Agrupación de por despachar por ubicación */
+  const grupos = {};
+  porDespachar.forEach(v => {
+    const key = (v.ubicacion || 'Sin ubicación').trim() || 'Sin ubicación';
+    if (!grupos[key]) grupos[key] = { pedidos: 0, sopas: 0 };
+    grupos[key].pedidos++;
+    grupos[key].sopas += Number(v.cantidad||0);
+  });
+
+  return `
+    <div class="space-y-5">
+
+      <!-- 3 KPI grandes horizontales -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- POR VENDER -->
+        <div class="bg-white rounded-2xl border border-brand-200 shadow-sm p-5 relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-brand-50 rounded-full -mr-8 -mt-8"></div>
+          <div class="relative">
+            <div class="w-10 h-10 rounded-xl bg-brand-100 text-brand-700 grid place-items-center mb-3">
+              <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+            </div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por vender</p>
+            <p class="text-3xl font-extrabold text-brand-700 leading-none mt-1">${porVender}</p>
+            <p class="text-xs text-slate-500 mt-1">sopas disponibles de ${meta}</p>
+            <div class="mt-3 h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full bg-brand-500" style="width:${meta ? Math.round((porVender/meta)*100) : 0}%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POR COBRAR -->
+        <div class="bg-white rounded-2xl border border-amber-200 shadow-sm p-5 relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-full -mr-8 -mt-8"></div>
+          <div class="relative">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 grid place-items-center mb-3">
+              <i data-lucide="clock" class="w-5 h-5"></i>
+            </div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por cobrar</p>
+            <p class="text-3xl font-extrabold text-amber-700 leading-none mt-1">${money(montoPorCobrar)}</p>
+            <p class="text-xs text-slate-500 mt-1">${porCobrar.length} pedido(s) · ${sopasPorCobrar} sopa(s) sin conciliar</p>
+          </div>
+        </div>
+
+        <!-- POR DESPACHAR -->
+        <div class="bg-white rounded-2xl border border-sky-200 shadow-sm p-5 relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-sky-50 rounded-full -mr-8 -mt-8"></div>
+          <div class="relative">
+            <div class="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 grid place-items-center mb-3">
+              <i data-lucide="truck" class="w-5 h-5"></i>
+            </div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Por despachar</p>
+            <p class="text-3xl font-extrabold text-sky-700 leading-none mt-1">${sopasPorDespachar}</p>
+            <p class="text-xs text-slate-500 mt-1">${porDespachar.length} pedido(s) conciliados sin entregar</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Franja de resumen numérico -->
+      <div class="bg-slate-900 rounded-2xl shadow-sm p-5 text-white">
+        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Resumen financiero</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p class="text-xs text-slate-400">Recaudado</p>
+            <p class="text-xl font-extrabold text-emerald-400 mt-0.5">${money(recaudado)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Conciliado</p>
+            <p class="text-xl font-extrabold text-sky-400 mt-0.5">${money(conciliado)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Entregadas</p>
+            <p class="text-xl font-extrabold text-brand-400 mt-0.5">${sopasEntregadas} <span class="text-sm font-semibold text-slate-400">sopas</span></p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Meta total</p>
+            <p class="text-xl font-extrabold text-white mt-0.5">${money(meta * precio())}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desglose por ubicación (solo si hay pendientes) -->
+      ${Object.keys(grupos).length > 0 ? `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-100">
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="map-pin" class="w-4 h-4 text-sky-600"></i>
+              Pendientes por despachar · agrupados por ubicación
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">Para armar los paquetes según el sitio de entrega.</p>
+          </div>
+          <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+            ${Object.entries(grupos).sort().map(([ubi, g]) => `
+              <div class="bg-sky-50/60 border border-sky-100 rounded-xl p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="font-bold text-sm text-slate-800 truncate">${esc(ubi)}</p>
+                  <span class="inline-flex items-center gap-1 bg-sky-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                    <i data-lucide="package" class="w-3 h-3"></i>${g.sopas}
+                  </span>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-1">${g.pedidos} pedido(s)</p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Últimos movimientos -->
+      <div class="grid lg:grid-cols-2 gap-5">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600"></i>
+              Ventas sin conciliar (${porCobrar.length})
+            </h3>
+          </div>
+          ${porCobrar.length === 0 ? `<p class="p-4 text-xs text-slate-400 italic text-center">Todo conciliado ✓</p>` : `
+            <div class="max-h-72 overflow-y-auto divide-y divide-slate-100">
+              ${porCobrar.slice(0, 20).map(v => `
+                <div class="px-4 py-2.5 flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-sm text-slate-800 truncate">${esc(v.cliente || 'Sin nombre')}</p>
+                    <p class="text-[11px] text-slate-400">${esc(v.referencia || 'sin referencia')} · ${esc(v.colaborador || '')}</p>
+                  </div>
+                  <span class="text-sm font-bold text-amber-700 shrink-0">${money(v.montoPagado)}</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="package" class="w-4 h-4 text-sky-600"></i>
+              Por despachar (${porDespachar.length})
+            </h3>
+          </div>
+          ${porDespachar.length === 0 ? `<p class="p-4 text-xs text-slate-400 italic text-center">Todo despachado ✓</p>` : `
+            <div class="max-h-72 overflow-y-auto divide-y divide-slate-100">
+              ${porDespachar.slice(0, 20).map(v => `
+                <div class="px-4 py-2.5 flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-sm text-slate-800 truncate">${esc(v.cliente || 'Sin nombre')}</p>
+                    <p class="text-[11px] text-slate-400">${esc(v.ubicacion || 'sin ubicación')}${v.piso?' · Piso '+esc(v.piso):''}${v.departamento?' · Depto '+esc(v.departamento):''}</p>
+                  </div>
+                  <span class="inline-flex items-center gap-1 bg-sky-100 text-sky-800 text-xs font-bold px-2 py-0.5 rounded-full shrink-0">
+                    <i data-lucide="soup" class="w-3 h-3"></i>${v.cantidad}
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+    </div>`;
+}
 
 /* ═══════════════════════════════════════════════════════
    ADMIN · VENTAS
@@ -549,7 +785,7 @@ function filaAdmin(v) {
         <div data-badge class="px-1 mt-1">${badgeIncompleta(v)}</div>
       </td>
       <td class="px-2 py-2 align-top min-w-[140px]">
-        ${inlineCell(v.id,'ubicacion',v.ubicacion,{ extra:'text-xs', ph:'Ubicación' })}
+        ${inlineCell(v.id,'ubicacion',v.ubicacion,{ extra:'text-xs', ph:'Ubicación', list:'ubicaciones-list' })}
         <div class="flex gap-1">
           ${inlineCell(v.id,'piso',v.piso,{ extra:'text-xs', ph:'Piso' })}
           ${inlineCell(v.id,'departamento',v.departamento,{ extra:'text-xs', ph:'Depto' })}
@@ -606,7 +842,7 @@ function panelEquipo() {
   return `
     <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 mb-4 flex items-start gap-2">
       <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
-      <span>La configuración de correos se guarda en <b>este navegador</b>. Si cambias de equipo o limpias los datos, deberás volver a configurarlo. Se recomienda hacerlo desde el mismo navegador.</span>
+      <span>La configuración de correos se guarda en <b>este navegador</b>. Se recomienda hacerlo siempre desde el mismo equipo.</span>
     </div>
     <div class="grid lg:grid-cols-3 gap-5">
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -751,7 +987,7 @@ function panelRespaldo() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   COLABORADOR
+   COLABORADOR (simplificado: solo sus ventas y datos de pago)
    ═══════════════════════════════════════════════════════ */
 function panelColaborador() {
   const mias = ventasOrd().filter(v => v.colaboradorEmail === user.email);
@@ -760,7 +996,7 @@ function panelColaborador() {
       <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
         <div>
           <h3 class="font-bold text-slate-900">Mis ventas registradas</h3>
-          <p class="text-xs text-slate-500 mt-0.5">${mias.length} registro(s) · puedes editar directamente en la tabla</p>
+          <p class="text-xs text-slate-500 mt-0.5">${mias.length} registro(s) · edita tocando la celda</p>
         </div>
         <button id="btn-new-inline" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-3.5 py-2 rounded-xl transition">
           <i data-lucide="plus" class="w-4 h-4"></i> Nueva venta
@@ -777,8 +1013,7 @@ function panelColaborador() {
               <th class="px-3 py-3 font-bold text-center">Cant.</th>
               <th class="px-3 py-3 font-bold text-right">Monto</th>
               <th class="px-3 py-3 font-bold">Referencia</th>
-              <th class="px-3 py-3 font-bold">Conciliado</th>
-              <th class="px-3 py-3 font-bold">Entregado</th>
+              <th class="px-3 py-3 font-bold">Estado</th>
               <th class="px-3 py-3"></th>
             </tr>
           </thead>
@@ -791,7 +1026,7 @@ function panelColaborador() {
                   <div data-badge class="px-1 mt-1">${badgeIncompleta(v)}</div>
                 </td>
                 <td class="px-2 py-2 align-top min-w-[140px]">
-                  ${inlineCell(v.id,'ubicacion',v.ubicacion,{extra:'text-xs',ph:'Ubicación'})}
+                  ${inlineCell(v.id,'ubicacion',v.ubicacion,{extra:'text-xs',ph:'Ubicación',list:'ubicaciones-list'})}
                   <div class="flex gap-1">
                     ${inlineCell(v.id,'piso',v.piso,{extra:'text-xs',ph:'Piso'})}
                     ${inlineCell(v.id,'departamento',v.departamento,{extra:'text-xs',ph:'Depto'})}
@@ -807,16 +1042,16 @@ function panelColaborador() {
                   ${inlineCell(v.id,'referencia',v.referencia,{extra:'font-mono text-xs',ph:'Referencia'})}
                 </td>
                 <td class="px-3 py-3">
-                  <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
-                    ${v.conciliado?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">
-                    <i data-lucide="${v.conciliado?'badge-check':'clock'}" class="w-3 h-3"></i> ${v.conciliado?'Sí':'No'}
-                  </span>
-                </td>
-                <td class="px-3 py-3">
-                  <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full
-                    ${v.entregado?'bg-sky-50 text-sky-700':'bg-slate-100 text-slate-600'}">
-                    <i data-lucide="${v.entregado?'check-circle-2':'package'}" class="w-3 h-3"></i> ${v.entregado?'Sí':'No'}
-                  </span>
+                  <div class="flex flex-col gap-1">
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full w-fit
+                      ${v.conciliado?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-600'}">
+                      <i data-lucide="${v.conciliado?'badge-check':'clock'}" class="w-3 h-3"></i> ${v.conciliado?'Conciliado':'Sin conciliar'}
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full w-fit
+                      ${v.entregado?'bg-sky-50 text-sky-700':'bg-slate-100 text-slate-600'}">
+                      <i data-lucide="${v.entregado?'check-circle-2':'package'}" class="w-3 h-3"></i> ${v.entregado?'Entregado':'Sin entregar'}
+                    </span>
+                  </div>
                 </td>
                 <td class="px-3 py-3 text-right whitespace-nowrap">
                   <button data-action="del" data-id="${v.id}" title="Eliminar"
@@ -921,32 +1156,184 @@ function panelTesorero() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   DESPACHADOR
+   DESPACHADOR · con agrupación por ubicación
    ═══════════════════════════════════════════════════════ */
 function panelDespachador() {
   const list = ventasOrd().filter(v => v.conciliado);
   const pendientes = list.filter(v => !v.entregado);
   const entregadas = list.filter(v => v.entregado);
 
+  const totalSopasPend = pendientes.reduce((s,v) => s + Number(v.cantidad||0), 0);
+  const totalSopasEnt  = entregadas.reduce((s,v) => s + Number(v.cantidad||0), 0);
+
+  const grupos = {};
+  pendientes.forEach(v => {
+    const key = (v.ubicacion || 'Sin ubicación').trim() || 'Sin ubicación';
+    if (!grupos[key]) grupos[key] = [];
+    grupos[key].push(v);
+  });
+  const ubicaciones = Object.keys(grupos).sort();
+
   return `
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-extrabold text-slate-900">Entregas</h2>
-          <p class="text-xs text-slate-500">${pendientes.length} pendiente(s) · ${entregadas.length} entregada(s)</p>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-extrabold text-slate-900">Panel de Entregas</h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              <b class="text-slate-700">${pendientes.length}</b> pedido(s) por entregar (<b class="text-brand-700">${totalSopasPend} sopas</b>) ·
+              <b class="text-emerald-700">${entregadas.length}</b> ya entregado(s) (${totalSopasEnt} sopas)
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="btn-vista-lista" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+              ${despachoVista === 'lista' ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+              <i data-lucide="list" class="w-3.5 h-3.5"></i> Lista
+            </button>
+            <button id="btn-vista-tarjetas" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+              ${despachoVista === 'tarjetas' ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+              <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> Tarjetas
+            </button>
+            <button id="btn-agrupar" class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition
+              ${despachoAgrupar ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> Agrupar por ubicación
+            </button>
+          </div>
         </div>
       </div>
-      ${pendientes.length === 0 ? vacio('Sin entregas pendientes', 'Cuando el tesorero concilie pagos, aparecerán aquí.') : `
-      <div class="grid sm:grid-cols-2 gap-3">
-        ${pendientes.map(v => cardEntrega(v)).join('')}
-      </div>`}
+
+      ${pendientes.length === 0
+        ? vacio('Sin entregas pendientes', 'Cuando el tesorero concilie pagos, aparecerán aquí.')
+        : despachoVista === 'lista'
+          ? (despachoAgrupar
+              ? ubicaciones.map(ubi => renderGrupoUbicacion(ubi, grupos[ubi])).join('')
+              : `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">${renderListaEntregas(pendientes)}</div>`)
+          : (despachoAgrupar
+              ? ubicaciones.map(ubi => renderGrupoUbicacionTarjetas(ubi, grupos[ubi])).join('')
+              : `<div class="grid sm:grid-cols-2 gap-3">${pendientes.map(v => cardEntrega(v)).join('')}</div>`)
+      }
+
       ${entregadas.length > 0 ? `
-        <div class="pt-4">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Entregadas recientemente</h3>
-          <div class="grid sm:grid-cols-2 gap-3">
-            ${entregadas.slice(0, 8).map(v => cardEntrega(v, true)).join('')}
+        <div class="pt-2">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Historial de entregas (${entregadas.length})</h3>
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th class="text-left px-3 py-2 font-bold">Cliente</th>
+                    <th class="text-left px-3 py-2 font-bold">Ubicación</th>
+                    <th class="text-center px-3 py-2 font-bold">Cant.</th>
+                    <th class="text-left px-3 py-2 font-bold">Entregó</th>
+                    <th class="text-left px-3 py-2 font-bold">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${entregadas.slice(0, 30).map(v => `
+                    <tr class="hover:bg-slate-50/70">
+                      <td class="px-3 py-2">
+                        <p class="font-semibold text-slate-800">${esc(v.cliente || '—')}</p>
+                        <p class="text-[11px] text-slate-400">${esc(v.telefono || '')}</p>
+                      </td>
+                      <td class="px-3 py-2 text-xs text-slate-600">
+                        ${esc(v.ubicacion || '—')}${v.piso?` · Piso ${esc(v.piso)}`:''}${v.departamento?` · Depto ${esc(v.departamento)}`:''}
+                      </td>
+                      <td class="px-3 py-2 text-center font-bold">${v.cantidad}</td>
+                      <td class="px-3 py-2">
+                        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                          <i data-lucide="user-check" class="w-3 h-3"></i> ${esc(v.entregadoPor || '—')}
+                        </span>
+                      </td>
+                      <td class="px-3 py-2 text-xs text-slate-500">${v.entregadoFecha ? fmt(v.entregadoFecha) : '—'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>` : ''}
+        </div>
+      ` : ''}
+    </div>`;
+}
+
+function grupoHeader(ubi, items) {
+  const totalSopas = items.reduce((s,v) => s + Number(v.cantidad||0), 0);
+  return `
+    <div class="px-4 py-3 bg-gradient-to-r from-sky-50 to-white border-b border-sky-100 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <i data-lucide="map-pin" class="w-4 h-4 text-sky-600"></i>
+        <span class="font-bold text-slate-800">${esc(ubi)}</span>
+        <span class="text-xs text-slate-500">(${items.length} pedido${items.length>1?'s':''})</span>
+      </div>
+      <span class="inline-flex items-center gap-1 bg-sky-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+        <i data-lucide="package" class="w-3 h-3"></i>${totalSopas} sopa(s)
+      </span>
+    </div>`;
+}
+
+function renderListaEntregas(items) {
+  return `
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+          <tr>
+            <th class="text-left px-3 py-2 font-bold">Cliente</th>
+            <th class="text-left px-3 py-2 font-bold">Teléfono</th>
+            <th class="text-left px-3 py-2 font-bold">Piso / Depto</th>
+            <th class="text-center px-3 py-2 font-bold">Cant.</th>
+            <th class="text-left px-3 py-2 font-bold">Referencia</th>
+            <th class="text-right px-3 py-2 font-bold">Acción</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          ${items.map(v => `
+            <tr class="hover:bg-slate-50/70">
+              <td class="px-3 py-3">
+                <p class="font-semibold text-slate-800">${val(v.cliente,'Sin nombre')}</p>
+              </td>
+              <td class="px-3 py-3 text-xs">
+                ${v.telefono
+                  ? `<a href="tel:${esc(v.telefono)}" class="text-brand-600 hover:underline font-medium">${esc(v.telefono)}</a>`
+                  : '<span class="missing">—</span>'}
+              </td>
+              <td class="px-3 py-3 text-xs text-slate-600">
+                ${v.piso ? `Piso ${esc(v.piso)}` : ''}${v.piso && v.departamento ? ' · ' : ''}${v.departamento ? `Depto ${esc(v.departamento)}` : ''}${!v.piso && !v.departamento ? '<span class="missing">—</span>' : ''}
+              </td>
+              <td class="px-3 py-3 text-center">
+                <span class="inline-flex items-center gap-1 bg-brand-100 text-brand-800 font-bold text-xs px-2 py-0.5 rounded-full">
+                  <i data-lucide="soup" class="w-3 h-3"></i>${v.cantidad}
+                </span>
+              </td>
+              <td class="px-3 py-3 text-xs font-mono text-slate-500">${val(v.referencia,'—')}</td>
+              <td class="px-3 py-3 text-right">
+                <button data-ent="${v.id}"
+                  class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-sm transition">
+                  <i data-lucide="check" class="w-3.5 h-3.5"></i> Entregar
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderGrupoUbicacion(ubi, items) {
+  return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      ${grupoHeader(ubi, items)}
+      ${renderListaEntregas(items)}
+    </div>`;
+}
+
+function renderGrupoUbicacionTarjetas(ubi, items) {
+  return `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      ${grupoHeader(ubi, items)}
+      <div class="p-4 grid sm:grid-cols-2 gap-3">
+        ${items.map(v => cardEntrega(v)).join('')}
+      </div>
     </div>`;
 }
 
@@ -974,8 +1361,13 @@ function cardEntrega(v, done = false) {
       </div>
       <div class="mt-3 flex items-center justify-between gap-2">
         <div class="text-[11px] ${v.referencia ? 'text-slate-400 font-mono' : 'missing'} truncate">Ref: ${v.referencia || '—'}</div>
-        ${done ? `<span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
-            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Entregado</span>` : `
+        ${done ? `
+          <div class="text-right">
+            <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i> Entregado
+            </span>
+            <p class="text-[10px] text-slate-400 mt-0.5">por ${esc(v.entregadoPor || '—')}</p>
+          </div>` : `
           <button data-ent="${v.id}"
             class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition">
             <i data-lucide="check" class="w-4 h-4"></i> Entregar
@@ -993,6 +1385,7 @@ function openModal() {
   if (disponibles <= 0) return toast('No quedan sopas disponibles', 'error');
 
   $('#modal-box').innerHTML = `
+    ${ubicacionesDatalist()}
     <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden fade-in">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -1001,7 +1394,7 @@ function openModal() {
           </div>
           <div>
             <h3 class="font-bold text-slate-900 leading-tight">Registrar venta</h3>
-            <p class="text-xs text-slate-500">${disponibles} sopa(s) disponibles · puedes completar después</p>
+            <p class="text-xs text-slate-500">${disponibles} sopa(s) disponibles · completa después</p>
           </div>
         </div>
         <button id="modal-close" class="w-9 h-9 grid place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
@@ -1015,7 +1408,9 @@ function openModal() {
           <div><label class="${LBL}">Teléfono</label>
             <input name="telefono" maxlength="25" placeholder="Opcional" class="${IN}"></div>
           <div><label class="${LBL}">Ubicación / Sector</label>
-            <input name="ubicacion" maxlength="80" placeholder="Opcional" class="${IN}"></div>
+            <input name="ubicacion" list="ubicaciones-list" maxlength="80" placeholder="Escribe o elige de la lista" class="${IN}">
+            <span class="text-[10px] text-slate-400 mt-1 block">Si no está en la lista, escríbela. Quedará disponible para todos.</span>
+          </div>
           <div><label class="${LBL}">Piso</label>
             <input name="piso" maxlength="10" placeholder="Opcional" class="${IN}"></div>
           <div><label class="${LBL}">Departamento</label>
@@ -1081,7 +1476,7 @@ function openModal() {
       colaboradorEmail: user.email,
       cliente: String(f.get('cliente')||'').trim(),
       telefono: String(f.get('telefono')||'').trim(),
-      ubicacion: String(f.get('ubicacion')||'').trim(),
+      ubicacion: String(f.get('ubicacion')||'').trim().toUpperCase(),
       piso: String(f.get('piso')||'').trim(),
       departamento: String(f.get('departamento')||'').trim(),
       cantidad,
@@ -1093,10 +1488,7 @@ function openModal() {
       entregado: false, entregadoPor: '', entregadoFecha: ''
     };
 
-    // Guardar en servidor
     await guardarVenta(nuevaVenta);
-
-    // Refrescar desde servidor
     await cargarVentasDesdeAPI();
     cerrar();
     render();
@@ -1108,7 +1500,7 @@ function openModal() {
    HELPERS
    ═══════════════════════════════════════════════════════ */
 function vacio(titulo, sub) {
-  return `<div class="py-16 text-center">
+  return `<div class="py-16 text-center bg-white rounded-2xl border border-slate-200">
     <div class="w-14 h-14 mx-auto rounded-2xl bg-slate-100 text-slate-400 grid place-items-center mb-3">
       <i data-lucide="inbox" class="w-6 h-6"></i>
     </div>
@@ -1132,13 +1524,13 @@ function fechaArchivo() {
 function exportarCSV() {
   const head = ['Fecha','Colaborador','Cliente','Telefono','Ubicacion','Piso','Departamento',
                 'Cantidad','PrecioUnit','MontoPagado','Metodo','Referencia',
-                'Conciliado','NotaConciliacion','Entregado','FechaConciliacion','FechaEntrega'];
+                'Conciliado','NotaConciliacion','Entregado','EntregadoPor','FechaConciliacion','FechaEntrega'];
   const rows = ventasOrd().map(v => [
     new Date(v.fecha).toLocaleString('es-CO'),
     v.colaborador||'', v.cliente||'', v.telefono||'', v.ubicacion||'', v.piso||'', v.departamento||'',
     v.cantidad||0, precio(), v.montoPagado||0, v.metodo||'', v.referencia||'',
     v.conciliado ? 'SI' : 'NO', v.notaConciliacion || '',
-    v.entregado ? 'SI' : 'NO',
+    v.entregado ? 'SI' : 'NO', v.entregadoPor || '',
     v.conciliadoFecha ? new Date(v.conciliadoFecha).toLocaleString('es-CO') : '',
     v.entregadoFecha ? new Date(v.entregadoFecha).toLocaleString('es-CO') : ''
   ]);
@@ -1148,7 +1540,7 @@ function exportarCSV() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   ⭐ EDICIÓN EN LÍNEA → GUARDA EN API
+   EDICIÓN EN LÍNEA
    ═══════════════════════════════════════════════════════ */
 $('#panel').addEventListener('change', async e => {
   const inp = e.target.closest('[data-inline]');
@@ -1190,6 +1582,8 @@ $('#panel').addEventListener('change', async e => {
         return;
       }
     }
+  } else if (field === 'ubicacion') {
+    value = String(value || '').trim().toUpperCase();
   } else {
     value = String(value || '').trim();
   }
@@ -1218,7 +1612,7 @@ $('#panel').addEventListener('keydown', e => {
 });
 
 /* ═══════════════════════════════════════════════════════
-   OTROS EVENTOS
+   EVENTOS
    ═══════════════════════════════════════════════════════ */
 $('#panel').addEventListener('click', async e => {
   const tb = e.target.closest('[data-tab]');
@@ -1239,7 +1633,8 @@ $('#panel').addEventListener('click', async e => {
     if (tipo === 'colaborador') data.colaboradores = data.colaboradores.filter(c => c.email !== email);
     if (tipo === 'despachador') data.despachadores = data.despachadores.filter(d => d.email !== email);
     guardarConfigLocal();
-    render(); renderSelect(); toast('Eliminado');
+    render(); renderSelect();
+    toast('Eliminado');
     return;
   }
 
@@ -1263,12 +1658,17 @@ $('#panel').addEventListener('click', async e => {
   if (ent) {
     const v = data.ventas.find(x => x.id === ent.dataset.ent);
     if (!v) return;
+    const cliente = v.cliente || 'Sin nombre';
+    const cant = v.cantidad || 0;
+    const quien = user.nombre || 'Despachador';
+    const ok = confirm(`Confirmar entrega\n\nCliente: ${cliente}\nCantidad: ${cant} sopa(s)\nEntrega: ${quien}\n\n¿Confirmas la entrega?`);
+    if (!ok) return;
     v.entregado = true;
-    v.entregadoPor = user.nombre;
+    v.entregadoPor = quien;
     v.entregadoFecha = new Date().toISOString();
     await guardarVenta(v);
     render();
-    toast('Entrega registrada');
+    toast(`✓ Entregado por ${quien}`, 'ok');
     return;
   }
 
@@ -1277,6 +1677,9 @@ $('#panel').addEventListener('click', async e => {
     renderPanel();
     return;
   }
+  if (e.target.closest('#btn-vista-lista'))    { despachoVista = 'lista'; renderPanel(); return; }
+  if (e.target.closest('#btn-vista-tarjetas')) { despachoVista = 'tarjetas'; renderPanel(); return; }
+  if (e.target.closest('#btn-agrupar'))        { despachoAgrupar = !despachoAgrupar; renderPanel(); return; }
 
   if (e.target.closest('#btn-xls') || e.target.closest('#btn-xls-tes')) exportarCSV();
   if (e.target.closest('#btn-json')) {
@@ -1286,16 +1689,13 @@ $('#panel').addEventListener('click', async e => {
   if (e.target.closest('#btn-clear-sales')) {
     if (!data.ventas.length) return toast('No hay ventas', 'info');
     if (!confirm(`¿Borrar TODAS las ${data.ventas.length} ventas del servidor? Irreversible.`)) return;
-    for (const v of [...data.ventas]) {
-      await borrarVentaAPI(v.id);
-    }
+    for (const v of [...data.ventas]) await borrarVentaAPI(v.id);
     data.ventas = [];
     render();
     toast('Todas las ventas fueron eliminadas');
   }
 });
 
-/* Conciliación (checkbox) */
 $('#panel').addEventListener('change', async e => {
   const chk = e.target.closest('[data-conc]');
   if (chk) {
@@ -1310,7 +1710,6 @@ $('#panel').addEventListener('change', async e => {
   }
 });
 
-/* Notas de conciliación */
 let notaTimer;
 $('#panel').addEventListener('input', e => {
   const n = e.target.closest('[data-nota]');
@@ -1318,10 +1717,7 @@ $('#panel').addEventListener('input', e => {
     clearTimeout(notaTimer);
     notaTimer = setTimeout(async () => {
       const v = data.ventas.find(x => x.id === n.dataset.nota);
-      if (v) {
-        v.notaConciliacion = n.value;
-        await guardarVenta(v);
-      }
+      if (v) { v.notaConciliacion = n.value; await guardarVenta(v); }
     }, 800);
   }
   if (e.target.id === 'f-search') {
@@ -1340,7 +1736,6 @@ $('#panel').addEventListener('change', e => {
   if (e.target.id === 'f-col')  { filtros.colaborador = e.target.value; renderPanel(); }
 });
 
-/* Formularios equipo / config */
 $('#panel').addEventListener('submit', e => {
   const addForm = e.target.closest('[data-add]');
   if (addForm) {
@@ -1427,7 +1822,6 @@ $('#btn-refresh').addEventListener('click', async () => {
   $('#screen-app').classList.remove('hidden');
   render();
 
-  // Auto-refresh cada 30 segundos
   setInterval(async () => {
     await cargarVentasDesdeAPI();
     render();
